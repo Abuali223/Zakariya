@@ -89,8 +89,14 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --     23 — 2-bosqich F2.5: RP-09 — barcha to'lov usullari bo'yicha statiya matritsasi (o'quv / kalendar yili; fin-matrix.sql:
 --          public.fin_matrix — Direktor, Moliya menejeri, buxgalter) va maosh taqsimoti (tasdiqlangan vedomost × lavozim ->
 --          EX-01…EX-04, app.fin_pos_article); nazorat — har manba bo'yicha hujjatlar soni va jami (Jami = Σ hujjatlar).
+--     24 — 2-bosqich F2.6 (1-qism): avans hisoboti ikki bosqichda (kassa_adv_report — tasdiq kutadi; kassa_doc_approve ->
+--          app.kassa_adv_approve: boshqa 2-ro'yxat xodimi / Direktor, kirituvchi va hisobdor emas, qoldiq o'zgarmagan — kassa:adv_stale;
+--          bitta kutilayotgan hisobot — kassa:adv_pending); ortiqcha sarf — Kt 6970 qatorlari (app.kassa_acc_part — 4230 qismi,
+--          app.kassa_acc_due — hisobdorga qarzimiz); «Ortiqcha sarfni qoplash» KO-2 (out_overspend, Dt 6970 Kt 5010, qarzdan oshmaydi);
+--          hisobdorga avans maqsadi (purposeArticle — sourceSnapshot); RP-07 public.kassa_acc_card (app.kassa_acc_fifo); kassa_checks.accDue;
+--          kassa_staff_open.due.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 23 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 24 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

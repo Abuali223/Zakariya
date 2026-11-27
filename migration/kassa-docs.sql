@@ -128,7 +128,7 @@ declare
   v_lines jsonb; v_line jsonb; v_i int := 0; v_n int; v_lamt numeric; v_art public.fin_articles%rowtype; v_aid text;
   v_debit text; v_credit text; v_counter text; v_sum_cash numeric := 0; v_sum_all numeric := 0; v_lnote text;
   v_need2 boolean; v_needd boolean; v_cap timestamptz; v_rows jsonb := '[]'::jsonb; v_is_cash boolean; v_orgcash boolean := false;
-  v_month text; v_hash text;
+  v_month text; v_hash text; v_purpose text; v_due numeric;
 begin
   o_dup := false;
   if p is null or jsonb_typeof(p) <> 'object' then
@@ -156,7 +156,7 @@ begin
 
   -- state-9: so'rov mazmunining kanonik izi (yuqoridagi izoh); qiymatlar hujjatga yoziladigandek me'yorlanadi (btrim, uzunlik, summa
   --   ko'rinishi — trim_scale), shuning uchun bir xil mazmun doim bir xil iz beradi. Tizim funksiyalari izni o'zi beradi (yoki bermaydi).
-  v_hash := case when p_internal then nullif(btrim(coalesce(p ->> 'reqHash', '')), '') else md5(jsonb_build_object(
+  v_hash := case when p_internal then nullif(btrim(coalesce(p ->> 'reqHash', '')), '') else md5((jsonb_build_object(
       'op', v_op, 'desk', v_desk, 'form', p_form, 'amount', trim_scale(v_amount), 'month', v_month,
       'partyType', nullif(btrim(coalesce(p ->> 'partyType', '')), ''), 'partyId', nullif(btrim(coalesce(p ->> 'partyId', '')), ''),
       'partyName', left(btrim(coalesce(p ->> 'partyName', '')), 200), 'basis', left(btrim(coalesce(p ->> 'basis', '')), 500),
@@ -167,7 +167,9 @@ begin
                                                     'amount', trim_scale(app.kassa_num(x, 'amount')), 'note', left(btrim(coalesce(x ->> 'note', '')), 300)) order by o)
                   from jsonb_array_elements(case when jsonb_typeof(p -> 'lines') = 'array' and jsonb_array_length(p -> 'lines') > 0 then p -> 'lines'
                                                  else jsonb_build_array(jsonb_build_object('articleId', p ->> 'articleId', 'amount', v_amount)) end)
-                       with ordinality t(x, o)))::text) end;
+                       with ordinality t(x, o)))
+      || case when v_op = 'out_accountable' and nullif(btrim(coalesce(p ->> 'purposeArticle', '')), '') is not null
+              then jsonb_build_object('purposeArticle', btrim(p ->> 'purposeArticle')) else '{}'::jsonb end)::text) end;
 
   perform pg_advisory_xact_lock(hashtext('iqror_doc:' || v_ref));   -- L0: bir xil kalit bilan parallel yuborish navbatga turadi
   select * into v_ex from public.cash_docs c where c."clientRef" = v_ref;
@@ -209,6 +211,24 @@ begin
   if v_op in ('out_advance', 'out_accountable') and v_ptype = 'employee' and app.kassa_emp_left(v_pid) then
     raise exception '«%» ishdan ketgan: unga yangi % berilmaydi. Yakuniy hisob-kitob (naqd maosh, xodim qaytargan pul, hisobdordan qaytim, avans hisoboti) — mumkin',
       v_pname, case when v_op = 'out_advance' then 'ish haqi avansi' else 'hisobdorga avans' end using errcode = '22023', hint = 'kassa:emp_left';
+  end if;
+
+  -- F2.6: hisobdorga avansning taxminiy maqsadi (statiya; ixtiyoriy) — avans hisobotida qator statiyasi shundan taklif qilinadi
+  v_purpose := case when v_op = 'out_accountable' and not p_internal then nullif(btrim(coalesce(p ->> 'purposeArticle', '')), '') end;
+  if v_purpose is not null and not exists (select 1 from public.fin_articles a where a.id = v_purpose and app.kassa_adv_article(a)) then
+    raise exception 'Avans maqsadi statiyasi noto''g''ri (avans hisobotida ishlatiladigan xarajat statiyasi tanlanadi)' using errcode = '22023', hint = 'kassa:article';
+  end if;
+  -- F2.6: ortiqcha sarfni qoplash — hisobdorga qarzimizdan (6970) oshmaydi (pul berishda hisobdor qulfi ostida yana tekshiriladi)
+  if v_op = 'out_overspend' and not p_internal then
+    v_due := app.kassa_acc_due(v_pid, v_desk);
+    if v_due <= 0 then
+      raise exception '«%» bo''yicha qoplanadigan ortiqcha sarf yo''q (avans hisobotida ortiqcha sarf tasdiqlanmagan yoki allaqachon berilgan)', v_pname
+        using errcode = 'P0001', hint = 'kassa:due_none';
+    end if;
+    if v_amount > v_due then
+      raise exception 'Summa (% so''m) hisobdorga qarzimizdan (ortiqcha sarf: % so''m) katta', trim_scale(v_amount), trim_scale(v_due)
+        using errcode = 'P0001', hint = 'kassa:due_over';
+    end if;
   end if;
 
   v_basis := left(btrim(coalesce(p ->> 'basis', '')), 500);
@@ -353,7 +373,8 @@ begin
     values (o_id, v_desk, p_form, v_op, 'draft', v_amount, v_ptype, v_pid, coalesce(v_pname, ''), v_basis, v_attach, v_note, v_nobasis,
             v_fiscal, v_fexempt,
             case when p_internal then nullif(p ->> 'sourceTable', '') end, case when p_internal then nullif(p ->> 'sourceId', '') end,
-            case when p_internal then p -> 'sourceSnapshot' when v_month is not null then jsonb_build_object('month', v_month) end, v_ref, v_cap,
+            case when p_internal then p -> 'sourceSnapshot' when v_month is not null then jsonb_build_object('month', v_month)
+                 when v_purpose is not null then jsonb_build_object('purposeArticle', v_purpose) end, v_ref, v_cap,
             v_need2, v_needd, p_uid, now(), p_internal and app.kassa_bool(p, 'isSystem'), p_uid,
             case when v_op = 'out_expense' and not p_internal then v_orgcash end, v_hash);
   insert into public.cash_doc_lines (id, "docId", "lineNo", debit, credit, amount, "articleId", cash, analytics, note)
@@ -705,13 +726,24 @@ language sql stable security definer set search_path = public, app, pg_temp as $
 $$;
 revoke all on function app.kassa_user_cards(text) from public, anon, authenticated;
 
--- Hisobdordagi hisobot qilinmagan qoldiq (4230): berilgan avanslar − naqd qaytim − avans hisobotlari. Doira — sinov kassasisiz barcha
---   kassalar; p_desk sinov kassasi bo'lsa — faqat o'sha kassa (sinov hujjatlari haqiqiy hisobga kirmaydi, ularning qoldig'i alohida).
+-- Hujjatning hisobdor (4230) hisobidagi ulushi (musbat): avans berish va qaytim — hujjat summasi; avans hisoboti (F2.6) — faqat Kt 4230
+--   qatorlari (ortiqcha sarf qismi — Kt 6970, hisobdorga qarzimiz; u 4230 ni kamaytirmaydi). Eski hisobotlarda hamma qator Kt 4230 — natija
+--   avvalgidek. Bir qoida: app.kassa_acc_open, app.kassa_accountables, oylik to'plam E4, hisobdor kartochkasi (kassa_acc_card).
+create or replace function app.kassa_acc_part(p_doc text, p_op text, p_amount numeric) returns numeric
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select case when p_op = 'nc_adv_report'
+              then (select coalesce(sum(l.amount), 0) from public.cash_doc_lines l where l."docId" = p_doc and l.credit = '4230')
+              else coalesce(p_amount, 0) end
+$$;
+revoke all on function app.kassa_acc_part(text, text, numeric) from public, anon, authenticated;
+
+-- Hisobdordagi hisobot qilinmagan qoldiq (4230): berilgan avanslar − naqd qaytim − avans hisobotlari (4230 qismi). Doira — sinov kassasisiz
+--   barcha kassalar; p_desk sinov kassasi bo'lsa — faqat o'sha kassa (sinov hujjatlari haqiqiy hisobga kirmaydi, ularning qoldig'i alohida).
 --   Avvalgi bir argumentli ta'rif o'rniga (chaqiruvlar o'zgarmaydi: p_desk berilmasa — avvalgidek).
 drop function if exists app.kassa_acc_open(text);
 create or replace function app.kassa_acc_open(p_party text, p_desk text default null) returns numeric
 language sql stable security definer set search_path = public, app, pg_temp as $$
-  select coalesce(sum(case when c.op = 'out_accountable' then c.amount else -c.amount end), 0)
+  select coalesce(sum(case when c.op = 'out_accountable' then c.amount else -app.kassa_acc_part(c.id, c.op, c.amount) end), 0)
     from public.cash_docs c
    where c."partyType" = 'employee' and c."partyId" = p_party and c.status = 'posted'
      and c.op in ('out_accountable', 'in_acc_return', 'nc_adv_report')
@@ -719,6 +751,21 @@ language sql stable security definer set search_path = public, app, pg_temp as $
               else not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest") end
 $$;
 revoke all on function app.kassa_acc_open(text, text) from public, anon, authenticated;
+
+-- Ortiqcha sarf qoldig'i (6970 — hisobdorga qarzimiz, F2.6): tasdiqlangan avans hisobotlarining Kt 6970 qatorlari − «Ortiqcha sarfni
+--   qoplash» chiqim orderlari (out_overspend). Doira — app.kassa_acc_open bilan bir xil.
+create or replace function app.kassa_acc_due(p_party text, p_desk text default null) returns numeric
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce(sum(case when c.op = 'nc_adv_report'
+                           then (select coalesce(sum(l.amount), 0) from public.cash_doc_lines l where l."docId" = c.id and l.credit = '6970')
+                           else -c.amount end), 0)
+    from public.cash_docs c
+   where c."partyType" = 'employee' and c."partyId" = p_party and c.status = 'posted'
+     and c.op in ('nc_adv_report', 'out_overspend')
+     and case when coalesce((select k."isTest" from public.cash_desks k where k.id = p_desk), false) then c.desk = p_desk
+              else not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest") end
+$$;
+revoke all on function app.kassa_acc_due(text, text) from public, anon, authenticated;
 
 -- Avans hisobotining (АО-1) qatoriga tanlanadigan statiya — BITTA qoida (acc-5): server (kassa-links.sql: kassa_adv_report) ham,
 --   «Avans hisoboti» shaklidagi ro'yxat ham (kassa-day.sql: kassa_refs — «advReport» belgisi) shundan. Reja §4.4 da ikkinchi tomoni
@@ -792,6 +839,9 @@ begin
   if not (app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: hujjatni Moliya menejeri / buxgalter yoki Direktor tasdiqlaydi' using errcode = '42501';
   end if;
+  -- F2.6: avans hisobotida hisobdor qulfi (iqror_acc) hujjat qatori qulfidan OLDIN — avans hisoboti, uni bekor qilish (kassa_adv_report_void)
+  --   va avans / qaytim to'lovi bilan bir tartib (iqror_acc → qator / L4): aks holda bir vaqtdagi tasdiq va bekor qilish o'zaro qulflanardi
+  perform pg_advisory_xact_lock(hashtext('iqror_acc:' || coalesce(c."partyId", ''))) from public.cash_docs c where c.id = p_id and c.op = 'nc_adv_report';
   select * into v_doc from public.cash_docs c where c.id = p_id for update;
   if not found then raise exception 'Hujjat topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
   if v_doc.status <> 'draft' then
@@ -799,6 +849,9 @@ begin
       return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', true);
     end if;
     raise exception 'Hujjat tasdiq kutmayapti (holati: %)', v_doc.status using errcode = 'P0001', hint = 'kassa:bad_status';
+  end if;
+  if v_doc.op = 'nc_adv_report' then   -- F2.6: avans hisoboti — tasdiq bilan o'tkaziladi (kassa-links.sql: app.kassa_adv_approve)
+    return app.kassa_adv_approve(p_id, v_uid);
   end if;
   v_due := not v_doc."needsDirector" and app.kassa_org_due(v_doc);   -- sec-3: Direktor talabi endi qo'shiladimi
   perform app.kassa_flag(true);
@@ -982,7 +1035,7 @@ begin
   -- Qaytarish: faktura qismining hisobvarag'i (4010 — boshlangan davr / 6310 — kelgusi oy) pul berilayotgan kunga ko'ra (acc-7)
   if v_op = 'out_refund' and v_was = 'approved' then perform app.kassa_refund_resplit(p_id, v_uid); end if;
   v_doc := app.kassa_doc_post(p_id, v_uid);
-  if v_was <> 'posted' and v_op in ('out_refund', 'out_advance', 'out_expense', 'in_acc_return', 'in_staff_return', 'in_damage_repay') then
+  if v_was <> 'posted' and v_op in ('out_refund', 'out_advance', 'out_expense', 'in_acc_return', 'in_staff_return', 'in_damage_repay', 'out_overspend') then
     perform app.kassa_link_paid(p_id, v_uid);
   end if;
   perform app.kassa_flag(false);
@@ -1023,7 +1076,7 @@ begin
   if v_tuition then perform pg_advisory_xact_lock(hashtext('iqror_pay:' || coalesce(v_party, ''))); end if;
   -- Hisobdor qulfi (hisobdorga avans, qaytim) va maosh / avans navbati (xodim qaytargan pul, avans va naqd maosh orderi) — pul berish /
   --   qabul qilishdagi tartibda (S → P → L4)
-  if v_op in ('out_accountable', 'in_acc_return', 'in_staff_return', 'out_advance', 'out_salary') then perform app.kassa_link_prelock(p_id); end if;
+  if v_op in ('out_accountable', 'in_acc_return', 'in_staff_return', 'out_advance', 'out_salary', 'out_overspend') then perform app.kassa_link_prelock(p_id); end if;
   perform app.kassa_lock_desk(v_desk);
   select * into v_doc from public.cash_docs c where c.id = p_id for update;
   if v_doc.status = 'void' then return app.kassa_doc_json(p_id) || jsonb_build_object('ok', true, 'dup', true); end if;

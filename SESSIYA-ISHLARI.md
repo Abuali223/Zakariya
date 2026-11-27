@@ -3761,6 +3761,60 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   maosh fondining statiyalar bo'yicha taqsimoti; «Jami = Σ hujjatlar» belgisi har ochilganda tekshiriladi. Buxgalter B22 (lavozim → statiya)
   ni tasdiqlashi kerak; ro'yxatda yo'q lavozim RP-09 da «aniqlanmagan» bo'lib ko'rinadi. Modul bilan birga (`--dev`) — keyingi deploy bilan.
 
+## 100) F2.6 1-qism — avans hisoboti to'liq: ikki bosqichli tasdiq, ortiqcha sarf, RP-07 hisobdor kartochkasi (reliz 24) — 2026-11-27
+
+- **Egasi (2026-11-27):** «Qolgan bandlarni boshla» — navbatdagi band F2.6 (reja: avans hisobotlari to'liq — ortiqcha sarf (6970) va uni
+  qoplash orderi, tasdiq, RP-07 yoshi, statiya taklifi, chek suratlari). Ikki qismga bo'lindi: 1-qism (reliz 24) — server mantig'i va
+  ekranlar; 2-qism (reliz 25) — chek suratlari (yopiq saqlash joyi), hisobot muddati sozlamasi va bloklash.
+- **Ikki bosqich (`kassa-links.sql`):** avans hisobotini (АО-1) 2-ro'yxat xodimi yoki Direktor kiritadi — hujjat tasdiq kutadi (raqamsiz,
+  xarajatsiz, hisobdor qoldig'i o'zgarmaydi); bitta hisobdorda bitta kutilayotgan hisobot (`kassa:adv_pending`). Tasdiq (`kassa_doc_approve`
+  → `app.kassa_adv_approve`): kirituvchi emas (`kassa:self_approve`), hisobdorning o'zi emas — bog'langan xodim kartasi bo'yicha, Direktor
+  ham (`kassa:self_report`); hisobdor qulfi ostida qoldiq kiritilgandagi bilan bir xil bo'lishi shart (avans berilgan yoki qaytim olingan
+  bo'lsa — `kassa:adv_stale`, bekor qilinib qayta kiritiladi). Tasdiq bilan o'tkaziladi («А-» raqami, bugungi kun) va har qator
+  «Buxgalteriya»ga xarajat bo'ladi; rad etish va bekor qilish — so'rovlardagi kabi. «Tasdiqlash» navbatida (kassa holati) avans hisobotlari
+  Direktorda ham (o'zi hisobdor bo'lganlari bundan mustasno).
+- **Ortiqcha sarf:** hisobot qoldiqdan katta bo'lsa — qoldiq qatorlarga tartib bilan (Kt 4230), qolgani Kt 6970 (hisobdorga qarzimiz,
+  tahlilda «overspend»); chegaradagi qator ikkiga bo'linadi; hujjat suratida — hisobot sanasi, qoldiq oldin / keyin, ortiqcha sarf, qarz.
+  Bitta qoida: `app.kassa_acc_part` (hujjatning 4230 ulushi) — hisobdor qoldig'i, nazorat ro'yxatining hisobdorlar bo'limi, oylik to'plam E4
+  va kartochka faqat 4230 qismi bilan; `app.kassa_acc_due` — 6970 qoldig'i (nazorat ro'yxatida «Hisobdorlarga qarzimiz»). Yangi operatsiya
+  **«Ortiqcha sarfni qoplash»** (KO-2, `out_overspend`: Dt 6970 Kt 5010, OP-07, 2-ro'yxat tasdig'i) — qarzdan oshmaydi: so'rovda
+  (`kassa:due_none` / `kassa:due_over`) va pul berishda hisobdor qulfi ostida yana; ortiqcha sarfi qoplangan hisobot bekor qilinmaydi
+  (`kassa:due_used` — avval qoplash orderi).
+- **Avans maqsadi:** «Hisobdorga avans» so'rovida taxminiy statiya (ixtiyoriy; faqat avans hisobotida ishlatiladigan statiyalar, aks holda
+  `kassa:article`) — hujjat suratida va so'rov izida (o'sha kalit bilan boshqa maqsad — rad); boshqa operatsiyalarda bu maydon e'tiborsiz.
+  Avans hisoboti oynasida birinchi qator statiyasi eng eski yopilmagan avans maqsadidan taklif qilinadi.
+- **RP-07 (`kassa-day.sql`: `kassa_acc_card`):** ro'yxat — hisobdor qoldig'i (4230), qarzimiz (6970) yoki tasdiq kutayotgan hisoboti bor
+  xodimlar: eng eski yopilmagan avans sanasi (FIFO — `app.kassa_acc_fifo`: qaytim va hisobotlarning 4230 qismi eng eski avanslarni yopadi),
+  yoshi maktab ish kunlarida, 3 kundan oshsa muddati o'tgan; kartochka — qoldiqlar, yopilmagan avanslar maqsadi bilan, kutilayotgan hisobot
+  (summa, kirituvchi, ortiqcha sarf), o'tkazilgan hujjatlar (4230 / 6970 ta'siri). Ko'radi — kassa hujjatlarini ko'radiganlar. Oy oxiri
+  ro'yxatida yangi 15-band — «Tasdiq kutayotgan avans hisobotlari» (tasdiqlansa xarajat tasdiq kuni bilan yoziladi).
+- **Sahifa (`fin-kassa.js`, `fin-print.js`):** avans hisoboti oynasi — hisobdor tanlanganda qoldiq, qarz va yopilmagan avanslar, ortiqcha sarf
+  ogohlantirishi, «Tasdiqqa yuborish»; «So'rovlar» va «Tasdiqlash»da avans hisoboti (tasdiq oynasida qoldiq va ortiqcha sarf), tasdiqdan
+  keyin АО-1 chop etish taklifi (ortiqcha sarf va kim kiritdi / tasdiqladi qatorlari); «Hisobdorga avans»da maqsad tanlovi; «Ortiqcha sarfni
+  qoplash» (qarz ko'rinadi, summa to'ldiriladi); «Kassa» → «Hisobdorlar» (RP-07 ro'yxati va kartochka, chop etish 3 tilda); nazorat
+  ro'yxati va oy oxiri ro'yxatida yangi qatorlar.
+- **Qulflar tartibi:** tasdiq va bekor qilish bir vaqtda kelsa o'zaro qulflanmasin — `kassa_doc_approve` avans hisobotida hisobdor qulfini
+  hujjat qatori qulfidan oldin oladi (avans hisoboti, uni bekor qilish va avans / qaytim to'lovi bilan bir tartib).
+- **Reliz 24:** `fin-version`, `SERVER_VER`, `kassa-checks` (ochiq funksiyalar 60, ichki 133, operatsiya qoidalari 23, barmoq izlari 390;
+  24-band: avans hisobotida «Direktor imzolagan 2-ro'yxat» va «o'tkazgan = tasdiqlagan» qoidalari qo'llanmaydi), `test-fin-rights`
+  (yopiq ro'yxatlarga `kassa_acc_card`).
+- **Sinovlar:** yangi `test-kassa-adv.sql` (55: maqsad, ikki bosqich, rad / bekor, eskirgan hisobot, ortiqcha sarf — aynan chegarada ham,
+  qoplash orderi — so'rovda va pul berishda, bekor qilish taqiqi, RP-07 ro'yxat / kartochka / FIFO, Direktor-hisobdor, 4230 formulalari —
+  nazorat ro'yxati va E4 keyingi oyda ham); `test-kassa-report`, `test-kassa-checks`, `test-kassa`, `test-kassa-inv`, `test-fin-rights` —
+  moslashtirildi; poyga sinoviga 18-bo'lim (o'sha hisobdorga 8 seans hisobot — bittasi o'tadi; tasdiq va rad, tasdiq va qaytim, qarzdan ko'p qoplash
+  orderlari, hisobotni bekor qilish va qoplash — bir vaqtda; hech qayerda deadlock yo'q);
+  mutatsiya 54/54 (birinchi o'tishda 4 tasi tirik — maqsad maydoni boshqa operatsiyada, FIFO da hisobotning to'liq summasi, o'zi hisobdor
+  Direktor navbati, kartochkada qoralama: har biriga sinov qo'shildi; faqat qulfga oid o'zgarishlar poyga sinovi bilan qoplangan);
+  node — `fin-kassa` (+5), `fin-print` (+2), `fin-inv`; brauzer — `k4` (nazorat ro'yxati 34 qator), `k7` §2b (ikki bosqich), `k22` (oy oxiri ro'yxati 15 band), yangi `k26` (21).
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 78/78, jonli zanjir va qayta zanjir, tugun va server sinovlari) — hammasi
+  yashil (`test-kassa-adv` 55/55, `test-kassa-report` 169/169, `test-kassa` 339/339, `test-kassa-checks` 55/55, `test-fin-rights` 125/125);
+  brauzer to'plami — 33 o'tish, 801 tekshiruv: to'liq o'tishda `k4` (nazorat ro'yxatidagi yangi 34-qator) va `k26` (CSS bilan bosh harfda
+  ko'rinadigan yorliq) kutilmalari eskirgan edi — ssenariylar tuzatildi va ikkalasi qayta o'tkazildi (38/38, 21/21); qolganlari birinchi
+  o'tishda yashil.
+- **Egasi va buxgalter uchun:** avans hisoboti endi ikki kishi bilan (kirituvchi va tasdiqlovchi); hisobdor cheklari avansdan ko'p bo'lsa
+  farq 6970 da qarzimiz bo'lib turadi va kassadan «Ortiqcha sarfni qoplash» orderi bilan beriladi; RP-07 — har hisobdor bo'yicha qoldiq,
+  qarz, muddati o'tgan avanslar. Modul bilan birga (`--dev`) — keyingi deploy bilan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

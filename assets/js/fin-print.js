@@ -75,7 +75,7 @@ const T = {
     mxNoArt: '(статьясиз)', mxBalEnd: 'Давр охирига қолдиқ', mxOpen: 'Ой бошига қолдиқ', mxClose: 'Ой охирига қолдиқ',
     mxExTr: (a, b) => `Ички ўтказмаларсиз (банк): кирим ${a}, чиқим ${b}`, mxEmpty: 'Бу ойда ўтказилган ордер йўқ.',
     mxSrc: 'Манба — ўтказилган кирим ва чиқим ордерларининг нақд қаторлари (KO-4 билан бир манба). Ички ўтказма (банк) даромад ҳам, харажат ҳам эмас.',
-    mxMade: 'Тузди', accPerson: 'Ҳисобдор шахс', advDoc: 'Чек, ҳужжат', advAttach: n => `Чеклар ва ҳужжатлар: ${n} та`, advBal: (b, a) => `Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин ${b} сўм, кейин ${a} сўм.`,
+    mxMade: 'Тузди', accPerson: 'Ҳисобдор шахс', advDoc: 'Чек, ҳужжат', advAttach: n => `Чеклар ва ҳужжатлар: ${n} та`, advBal: (b, a) => `Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин ${b} сўм, кейин ${a} сўм.`, advOver: v => `Ортиқча сарф (ҳисобдорга қарзимиз, 6970): ${v} сўм — кассадан «Ортиқча сарфни қоплаш» чиқим ордери билан берилади.`, advWho: (a, b) => `Киритди: ${a}; тасдиқлади: ${b}.`,
     offsetBasis: (m, st, req) => `Ўзаро ҳисоб: ${m} ойи иш ҳақи ҳисобидан ўқув тўлови — ${st}${req ? '; ариза ' + req : ''}`,
     offsetText: (a, m) => `Ходимнинг ёзма аризасига асосан унинг ${m} ойи учун иш ҳақидан ${a} сўм фарзандининг ўқув тўлови ҳисобига ўтказилди. Нақд пул берилмади ва қабул қилинмади.`,
   },
@@ -135,7 +135,7 @@ const T = {
     mxNoArt: '(statiyasiz)', mxBalEnd: 'Davr oxiriga qoldiq', mxOpen: 'Oy boshiga qoldiq', mxClose: 'Oy oxiriga qoldiq',
     mxExTr: (a, b) => `Ichki o‘tkazmalarsiz (bank): kirim ${a}, chiqim ${b}`, mxEmpty: 'Bu oyda o‘tkazilgan order yo‘q.',
     mxSrc: 'Manba — o‘tkazilgan kirim va chiqim orderlarining naqd qatorlari (KO-4 bilan bir manba). Ichki o‘tkazma (bank) daromad ham, xarajat ham emas.',
-    mxMade: 'Tuzdi', accPerson: 'Hisobdor shaxs', advDoc: 'Chek, hujjat', advAttach: n => `Cheklar va hujjatlar: ${n} ta`, advBal: (b, a) => `Hisobdordagi avans qoldig‘i: hisobotdan oldin ${b} so‘m, keyin ${a} so‘m.`,
+    mxMade: 'Tuzdi', accPerson: 'Hisobdor shaxs', advDoc: 'Chek, hujjat', advAttach: n => `Cheklar va hujjatlar: ${n} ta`, advBal: (b, a) => `Hisobdordagi avans qoldig‘i: hisobotdan oldin ${b} so‘m, keyin ${a} so‘m.`, advOver: v => `Ortiqcha sarf (hisobdorga qarzimiz, 6970): ${v} so‘m — kassadan «Ortiqcha sarfni qoplash» chiqim orderi bilan beriladi.`, advWho: (a, b) => `Kiritdi: ${a}; tasdiqladi: ${b}.`,
     offsetBasis: (m, st, req) => `O‘zaro hisob: ${m} oyi ish haqi hisobidan o‘quv to‘lovi — ${st}${req ? '; ariza ' + req : ''}`,
     offsetText: (a, m) => `Xodimning yozma arizasiga asosan uning ${m} oyi uchun ish haqidan ${a} so‘m farzandining o‘quv to‘lovi hisobiga o‘tkazildi. Naqd pul berilmadi va qabul qilinmadi.`,
   },
@@ -195,7 +195,7 @@ const T = {
     mxNoArt: '(без статьи)', mxBalEnd: 'Остаток на конец периода', mxOpen: 'Остаток на начало месяца', mxClose: 'Остаток на конец месяца',
     mxExTr: (a, b) => `Без внутренних перемещений (банк): приход ${a}, расход ${b}`, mxEmpty: 'В этом месяце проведённых ордеров нет.',
     mxSrc: 'Источник — наличные строки проведённых приходных и расходных ордеров (тот же источник, что и КО-4). Внутреннее перемещение (банк) не является ни доходом, ни расходом.',
-    mxMade: 'Составил', accPerson: 'Подотчётное лицо', advDoc: 'Чек, документ', advAttach: n => `Чеки и документы: ${n} шт.`, advBal: (b, a) => `Остаток аванса у подотчётного лица: до отчёта ${b} сум, после ${a} сум.`,
+    mxMade: 'Составил', accPerson: 'Подотчётное лицо', advDoc: 'Чек, документ', advAttach: n => `Чеки и документы: ${n} шт.`, advBal: (b, a) => `Остаток аванса у подотчётного лица: до отчёта ${b} сум, после ${a} сум.`, advOver: v => `Перерасход (задолженность подотчётному лицу, 6970): ${v} сум — выдаётся из кассы расходным ордером «Возмещение перерасхода».`, advWho: (a, b) => `Ввёл: ${a}; утвердил: ${b}.`,
     offsetBasis: (m, st, req) => `Взаимозачёт: оплата за обучение в счёт заработной платы за ${m} — ${st}${req ? '; заявление от ' + req : ''}`,
     offsetText: (a, m) => `На основании письменного заявления сотрудника из его заработной платы за ${m} сумма ${a} сум зачтена в счёт оплаты за обучение ребёнка. Наличные деньги не выдавались и не принимались.`,
   },
@@ -514,6 +514,8 @@ function actHtml(doc, ctx, W, t, lang) {
     ${tx.attachment ? fld(t.attach, esc(tx.attachment)) : ''}
     ${doc.note ? fld(t.note, esc(doc.note)) : ''}
     ${adv && snap.openBefore != null && snap.openAfter != null ? `<p>${esc(t.advBal(money(W, snap.openBefore), money(W, snap.openAfter)))}</p>` : ''}
+    ${adv && num(snap.overspend) > 0 ? `<p><b>${esc(t.advOver(money(W, snap.overspend)))}</b></p>` : ''}
+    ${adv && doc.approvedBy ? `<p class="small">${esc(t.advWho(nameOf(ctx, doc.requestedBy) || '—', nameOf(ctx, doc.approvedBy) || '—'))}</p>` : ''}
     ${voidInfo(doc, ctx, t)}
     <div class="two" style="display:flex;gap:8mm">${sig(head.title, head.name)}${sig(chief.title, chief.name)}</div>
     ${ofs ? sig(t.acquainted, tx.party) : adv ? sig(t.accPerson, tx.party) : liable ? sig(t.acqLiable, tx.party) : ''}
@@ -1379,6 +1381,64 @@ export function fixActHtml(f, ctx, W) {
 //   Buxgalter (2026-11-26): naqd maosh vedomost va imzo bilan; xodimlar bir-birining maoshini ko'rmasligi uchun har xodimga o'quv yili
 //   (sentyabr – avgust) davomida bitta qaydnoma. Ma'lumot — kassa_pay_sheet (shu xodimning o'tkazilgan KO-2 «Ish haqi» / «Ish haqi
 //   avansi» va KO-1 «Xodim qaytargan pul»); 12 oy qatori (to'lovsiz oy — bo'sh qator), har to'lov — alohida qator imzo bilan.
+// ---------------------------------------------------------------- RP-07: hisobdor kartochkasi (F2.6)
+//   card — kassa_acc_card(p_party) javobi. Qatorlar — fin-kassa.js accCardRows bilan bir qoida: avans +4230; qaytim va avans hisobotining
+//   4230 qismi −4230; hisobotning ortiqcha sarf qismi +6970; «Ortiqcha sarfni qoplash» −6970; ketma-ket qoldiq / qarz.
+const AC = {
+  'uz-cyrl': { title: 'ҲИСОБДОР ШАХС КАРТОЧКАСИ', sub: 'Ҳисобдор шахслар билан ҳисоб-китоб (4230) ва ҳисобдор шахсга қарз (6970)', emp: 'Ҳисобдор шахс', asof: 'Ҳолат',
+    open: 'Ҳисобот қилинмаган аванс (4230)', due: 'Ҳисобдорга қарзимиз (6970)', aging: 'Ёпилмаган аванслар (қайтим ва ҳисоботлар энг эски авансдан бошлаб ёпади)', docs: 'Ҳужжатлар',
+    agCols: ['Сана', 'Ордер', 'Берилган', 'Қолган', 'Мақсади', 'Иш куни'], cols: ['Сана', 'Ҳужжат', 'Операция', 'Сумма', '4230', '6970', 'Қолдиқ / қарз'],
+    none: 'Йўқ', overdue: 'муддати ўтган', left: 'Ишдан кетган', pending: (a, n) => `Тасдиқ кутаётган аванс ҳисоботи: ${a} сўм (киритди: ${n}).`,
+    ops: { out_accountable: 'Ҳисобдорга аванс', in_acc_return: 'Ҳисобдордан қайтим', nc_adv_report: 'Аванс ҳисоботи', out_overspend: 'Ортиқча сарфни қоплаш' },
+    acq: 'Танишдим: ҳисобдор шахс', made: 'Тузди', printed: 'чоп этилди' },
+  'uz-latn': { title: 'HISOBDOR SHAXS KARTOCHKASI', sub: 'Hisobdor shaxslar bilan hisob-kitob (4230) va hisobdor shaxsga qarz (6970)', emp: 'Hisobdor shaxs', asof: 'Holat',
+    open: 'Hisobot qilinmagan avans (4230)', due: 'Hisobdorga qarzimiz (6970)', aging: 'Yopilmagan avanslar (qaytim va hisobotlar eng eski avansdan boshlab yopadi)', docs: 'Hujjatlar',
+    agCols: ['Sana', 'Order', 'Berilgan', 'Qolgan', 'Maqsadi', 'Ish kuni'], cols: ['Sana', 'Hujjat', 'Operatsiya', 'Summa', '4230', '6970', 'Qoldiq / qarz'],
+    none: 'Yo‘q', overdue: 'muddati o‘tgan', left: 'Ishdan ketgan', pending: (a, n) => `Tasdiq kutayotgan avans hisoboti: ${a} so‘m (kiritdi: ${n}).`,
+    ops: { out_accountable: 'Hisobdorga avans', in_acc_return: 'Hisobdordan qaytim', nc_adv_report: 'Avans hisoboti', out_overspend: 'Ortiqcha sarfni qoplash' },
+    acq: 'Tanishdim: hisobdor shaxs', made: 'Tuzdi', printed: 'chop etildi' },
+  ru: { title: 'КАРТОЧКА ПОДОТЧЁТНОГО ЛИЦА', sub: 'Расчёты с подотчётными лицами (4230) и задолженность подотчётному лицу (6970)', emp: 'Подотчётное лицо', asof: 'Состояние на',
+    open: 'Неотчитанный аванс (4230)', due: 'Задолженность подотчётному лицу (6970)', aging: 'Незакрытые авансы (возвраты и отчёты закрывают самый ранний аванс)', docs: 'Документы',
+    agCols: ['Дата', 'Ордер', 'Выдано', 'Остаток', 'Назначение', 'Раб. дней'], cols: ['Дата', 'Документ', 'Операция', 'Сумма', '4230', '6970', 'Остаток / долг'],
+    none: 'Нет', overdue: 'просрочен', left: 'Уволен', pending: (a, n) => `Авансовый отчёт ожидает утверждения: ${a} сум (ввёл: ${n}).`,
+    ops: { out_accountable: 'Аванс подотчётному лицу', in_acc_return: 'Возврат от подотчётного лица', nc_adv_report: 'Авансовый отчёт', out_overspend: 'Возмещение перерасхода' },
+    acq: 'Ознакомлен: подотчётное лицо', made: 'Составил', printed: 'напечатано' }
+};
+export function accCardHtml(card, ctx, W) {
+  ctx = ctx || {}; card = card || {};
+  const lang = langOf(ctx), t = T[lang], x = AC[lang] || AC['uz-cyrl'], o = ctx.org || {}, p = card.party || {}, ag = card.aging || [], pe = card.pending;
+  const sg = v => num(v) === 0 ? '' : `${num(v) > 0 ? '+' : '−'}${money(W, Math.abs(num(v)))}`;
+  let a = 0, e = 0;
+  const rows = (card.items || []).map(it => {
+    const d4 = it.op === 'out_accountable' ? num(it.acc) : -num(it.acc), d6 = it.op === 'out_overspend' ? -num(it.due) : num(it.due);
+    a += d4; e += d6;
+    return `<tr><td class="c">${esc(dmy(it.day))}</td><td class="c">${esc(docNo(it, t))}</td><td>${esc(x.ops[it.op] || it.op || '')}${it.purposeArticle ? ` (${esc(it.purposeArticle)})` : ''}</td>
+      <td class="r">${esc(money(W, it.amount))}</td><td class="r">${esc(sg(d4))}</td><td class="r">${esc(sg(d6))}</td><td class="r">${esc(money(W, a))}${e ? ' / ' + esc(money(W, e)) : ''}</td></tr>`;
+  }).join('');
+  const agRows = ag.map(r => `<tr><td class="c">${esc(dmy(r.day))}</td><td class="c">${esc(docNo({ series: 'KO2', no: r.no }, t))}</td><td class="r">${esc(money(W, r.amount))}</td>
+    <td class="r"><b>${esc(money(W, r.remaining))}</b></td><td>${esc(r.purposeArticle || '')}</td><td class="c">${esc(String(num(r.workDays)))}${r.overdue ? ' — ' + esc(x.overdue) : ''}</td></tr>`).join('');
+  const at = stamp(ctx.printedAt), ft = [`${p.id || ''} · ${dmy(card.today)}`];
+  if (at || ctx.printedBy) ft.push(`${x.printed}: ${[at, ctx.printedBy].filter(Boolean).join(', ')}`);
+  const chief = pickSign(ctx, 2, null, t.chief);
+  const html = `<div class="pg act ps">
+    <div class="hd">${orgBlock(o, t, lang)}</div>
+    <div class="ttl">${esc(x.title)}</div>
+    <div class="dt">${esc(x.sub)}</div>
+    ${fld(x.emp, `<b>${esc(p.name || p.id || '')}</b>${p.left ? ' — ' + esc(x.left) : ''}`)}
+    ${fld(x.asof, esc(dmy(card.today)))}
+    ${fld(x.open, `<b>${esc(money(W, card.open))}</b>`)}
+    ${fld(x.due, `<b>${esc(money(W, card.due))}</b>`)}
+    ${pe ? `<p>${esc(x.pending(money(W, pe.amount), pe.requestedByName || '—'))}</p>` : ''}
+    <p><b>${esc(x.aging)}</b></p>
+    ${ag.length ? `<table class="t"><thead><tr>${x.agCols.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${agRows}</tbody></table>` : `<p>${esc(x.none)}</p>`}
+    <p><b>${esc(x.docs)}</b></p>
+    ${rows ? `<table class="t"><thead><tr>${x.cols.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>` : `<p>${esc(x.none)}</p>`}
+    <div class="two" style="display:flex;gap:8mm">${sig(x.made, '')}${sig(chief.title, chief.name)}</div>
+    ${sig(x.acq, p.name || '')}
+    <div class="ft">${esc(ft.join(' · '))}</div></div>`;
+  return page(`${x.title} — ${p.name || p.id || ''}`, t, html);
+}
+
 const PS = {
   'uz-cyrl': { title: 'ИШ ҲАҚИ ТЎЛОВ ҚАЙДНОМАСИ', year: (a, b) => `${a}/${b} ўқув йили (сентябрь – август)`, emp: 'Ходим', code: 'Табел рақами',
     pos: 'Лавозими', teacher: 'Ўқитувчи', cols: ['№', 'Ой', 'Тўлов тури', 'Ҳужжат', 'Сана', 'Сумма', 'Олувчи имзоси'],

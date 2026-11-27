@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as W from './fin-words.js';
-import { docHtml, bookHtml, countHtml, bookRows, reportHtml, journalHtml, journalSheet, matrixHtml, matrixSheet, daysSheet, advSheet, packSheets, coverHtml } from './fin-print.js';
+import { docHtml, bookHtml, countHtml, bookRows, reportHtml, journalHtml, journalSheet, matrixHtml, matrixSheet, daysSheet, advSheet, packSheets, coverHtml, accCardHtml } from './fin-print.js';
 import { createRequire } from 'node:module';
 
 const org = { nameUz: '«SINOV MAKTAB» МЧЖ', nameRu: 'ООО «SINOV MAKTAB»', stir: '123456789', place: 'Тошкент ш.', printLang: 'uz-cyrl', extra: {} };
@@ -422,6 +422,50 @@ test('avans hisoboti: o‘zbek kirill va rus — qatorlar (chek), hisobdor, asos
   for (const must of ['АВАНСОВЫЙ ОТЧЁТ № АО-5', '11 января 2027 г.', 'Подотчётное лицо: Sinov Zavxoz', 'Основание: Авансовый отчёт 10.01.2027; Oziq-ovqat xaridi',
     'Приложение: Чеки и документы: 2 шт.', 'Остаток аванса у подотчётного лица: до отчёта 250 000=00 сум, после 50 000=00 сум.'])
     assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
+});
+
+// ---------------------------------------------------------------- F2.6: ortiqcha sarf, kiritgan / tasdiqlagan; RP-07 hisobdor kartochkasi
+test('F2.6 avans hisoboti: ortiqcha sarf qatori (Kt 6970) va eslatma, kiritgan / tasdiqlagan — uch tilda; tasdiqsiz (eski) hisobotda — yo‘q', () => {
+  const d = Object.assign({}, advDoc, { amount: 260000, requestedBy: 'u_mm', approvedBy: 'u_acc',
+    sourceSnapshot: { reportDate: '2027-01-10', openBefore: 250000, openAfter: 0, overspend: 10000 },
+    lines: [
+      { lineNo: 1, debit: '1010', credit: '4230', amount: 150000, articleId: 'EX-20', cash: false, note: 'Chek 15, 09.01', analytics: { partyId: 'staff:st1' } },
+      { lineNo: 2, debit: '2010', credit: '4230', amount: 100000, articleId: 'EX-16', cash: false, note: 'Chek 16, 09.01', analytics: { partyId: 'staff:st1' } },
+      { lineNo: 3, debit: '2010', credit: '6970', amount: 10000, articleId: 'EX-16', cash: false, note: 'Chek 16, 09.01', analytics: { partyId: 'staff:st1', kind: 'overspend' } },
+    ] });
+  const t = text(docHtml(d, ctx(), W));
+  for (const must of ['2010 6970 Chek 16, 09.01 10 000=00 EX-16', 'Ҳисобдордаги аванс қолдиғи: ҳисоботдан олдин 250 000=00 сўм, кейин – сўм.',
+    'Ортиқча сарф (ҳисобдорга қарзимиз, 6970): 10 000=00 сўм — кассадан «Ортиқча сарфни қоплаш» чиқим ордери билан берилади.',
+    'Киритди: Sinov Moliya; тасдиқлади: Sinov Buxgalter.', 'Сумма: 260 000=00'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  const l = text(docHtml(d, ctx({ lang: 'uz-latn' }), W));
+  assert.ok(l.includes('Ortiqcha sarf (hisobdorga qarzimiz, 6970): 10 000=00 so‘m') && l.includes('Kiritdi: Sinov Moliya; tasdiqladi: Sinov Buxgalter.'), l);
+  const r = text(docHtml(d, ctx({ lang: 'ru' }), W));
+  assert.ok(r.includes('Перерасход (задолженность подотчётному лицу, 6970): 10 000=00 сум') && r.includes('Ввёл: Sinov Moliya; утвердил: Sinov Buxgalter.'), r);
+  const old = text(docHtml(advDoc, ctx(), W));
+  assert.ok(!old.includes('Ортиқча сарф') && !old.includes('Киритди'), 'eski (bir bosqichli) hisobotda ortiqcha sarf va tasdiq qatori yo‘q');
+});
+test('F2.6 RP-07 hisobdor kartochkasi: qoldiq va qarz, yopilmagan avans (maqsadi, ish kuni), hujjatlar — 4230 / 6970 ta’siri va ketma-ket qoldiq; kirill va rus', () => {
+  const card = { ok: true, today: '2027-02-05', party: { id: 'staff:st1', name: 'Sinov Zavxoz', left: false }, open: 35000, due: 20000,
+    aging: [{ docId: 'a2', day: '2027-02-02', no: 7, amount: 40000, remaining: 35000, purposeArticle: 'EX-32', workDays: 3, overdue: false }],
+    pending: { id: 'p1', amount: 30000, requestedBy: 'u_mm', requestedByName: 'Sinov Moliya', overspend: 0 },
+    items: [
+      { id: 'a1', day: '2027-02-01', form: 'KO2', op: 'out_accountable', series: 'KO2', no: 5, amount: 50000, acc: 50000, due: 0, purposeArticle: 'EX-20' },
+      { id: 'r1', day: '2027-02-01', form: 'ACT', op: 'nc_adv_report', series: 'ADV', no: 1, amount: 70000, acc: 50000, due: 20000 },
+      { id: 'a2', day: '2027-02-02', form: 'KO2', op: 'out_accountable', series: 'KO2', no: 7, amount: 40000, acc: 40000, due: 0, purposeArticle: 'EX-32' },
+      { id: 'k1', day: '2027-02-03', form: 'KO1', op: 'in_acc_return', series: 'KO1', no: 3, amount: 5000, acc: 5000, due: 0 } ] };
+  const t = text(accCardHtml(card, ctx(), W));
+  for (const must of ['ҲИСОБДОР ШАХС КАРТОЧКАСИ', 'Ҳисобдор шахс: Sinov Zavxoz', 'Ҳолат: 05.02.2027', 'Ҳисобот қилинмаган аванс (4230): 35 000=00', 'Ҳисобдорга қарзимиз (6970): 20 000=00',
+    'Тасдиқ кутаётган аванс ҳисоботи: 30 000=00 сўм (киритди: Sinov Moliya).', '02.02.2027 Ч-7 40 000=00 35 000=00 EX-32 3',
+    '01.02.2027 Ч-5 Ҳисобдорга аванс (EX-20) 50 000=00 +50 000=00 50 000=00', '01.02.2027 А-1 Аванс ҳисоботи 70 000=00 −50 000=00 +20 000=00 – / 20 000=00',
+    '03.02.2027 К-3 Ҳисобдордан қайтим 5 000=00 −5 000=00 35 000=00 / 20 000=00', 'Танишдим: ҳисобдор шахс Sinov Zavxoz', 'Бош бухгалтер'])
+    assert.ok(t.includes(must), 'yo‘q: ' + must + '\n' + t);
+  const r = text(accCardHtml(card, ctx({ lang: 'ru' }), W));
+  for (const must of ['КАРТОЧКА ПОДОТЧЁТНОГО ЛИЦА', 'Задолженность подотчётному лицу (6970): 20 000=00', '01.02.2027 АО-1 Авансовый отчёт 70 000=00 −50 000=00 +20 000=00'])
+    assert.ok(r.includes(must), 'yo‘q: ' + must + '\n' + r);
+  const e = text(accCardHtml({ today: '2027-02-05', party: { id: 'staff:st9', name: 'Sinov Ketgan', left: true }, open: 0, due: 0, aging: [], items: [] }, ctx(), W));
+  assert.ok(e.includes('Sinov Ketgan — Ишдан кетган') && e.includes('Йўқ'), e);
+  assert.ok(!accCardHtml({ party: { name: '<b>x</b>' } }, ctx(), W).includes('<b>x</b>'), 'ism ekranlanadi');
 });
 
 test('RP-02: onlayn kassa Z-hisoboti — solishtirish, «yo‘q», kiritilmagan, ochiq kun, sinov kassasi', () => {

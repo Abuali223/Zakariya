@@ -138,7 +138,7 @@ const dm = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
   const rows0 = await dir.pg.$$eval('#kpd-mc-tbl tr[data-mc]', xs => Object.fromEntries(xs.map(x => [x.dataset.mc, { lv: x.dataset.mclv, t: x.innerText.replace(/\s+/g, ' ').trim() }])));
   const sum0 = await dir.pg.$eval('#kpd-mc-sum', e => e.textContent.trim());
   ok('«Davr» → oy oxiri ro‘yxati, joriy oy: INV joyida (o‘tkazilgan — bugun), yopilmagan kun yo‘q, «Oy hali tugamagan», yopish tugmasi yo‘q',
-    rows0.inv && rows0.inv.lv === 'ok' && rows0.inv.t.includes(`o‘tkazilgan — ${dm(d0)}`) && rows0.days_open.lv === 'ok' && Object.keys(rows0).length === 14
+    rows0.inv && rows0.inv.lv === 'ok' && rows0.inv.t.includes(`o‘tkazilgan — ${dm(d0)}`) && rows0.days_open.lv === 'ok' && Object.keys(rows0).length === 15
       && sum0 === 'Oy hali tugamagan — ro‘yxat oldindan ko‘rish uchun.' && !(await dir.pg.$('#kpd-mc-lock')), [rows0, sum0]);
   await dir.pg.selectOption('#kpd-month', ymP);
   await dir.pg.waitForFunction(m => document.querySelector('#kpd-mc-lock') || /Davrni yopib/.test((document.querySelector('#kpd-mc-sum') || {}).textContent || ''), ymP, { timeout: 15000 }).catch(() => {});

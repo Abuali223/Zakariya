@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
   deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
-  pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN, outboxDeclare, deskOutbox, bookCoverWhy, verifyLink } from './fin-kassa.js';
+  pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN, outboxDeclare, deskOutbox, bookCoverWhy, verifyLink,
+  canApproveAdv, canApproveDoc, advSplit, advSuggest, advOver, advApproveText, accCardRows } from './fin-kassa.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -770,4 +771,59 @@ test('F2.12 verifyLink: verify.html?k=<kalit> — sayt manzili bilan, kalit kodl
   assert.equal(verifyLink('0123456789abcdef0123456789abcdef', 'https://misol.test'), 'https://misol.test/verify.html?k=0123456789abcdef0123456789abcdef');
   assert.equal(verifyLink('a b&c', 'https://misol.test'), 'https://misol.test/verify.html?k=a%20b%26c');
   assert.equal(verifyLink(null, 'https://misol.test'), 'https://misol.test/verify.html?k=');
+});
+
+// ---------------------------------------------------------------- F2.6: avans hisoboti (ikki bosqich, ortiqcha sarf), RP-07
+test('F2.6 canApproveAdv / canApproveDoc: avans hisobotini kirituvchidan boshqa 2-ro‘yxat xodimi yoki Direktor tasdiqlaydi — hisobdor emas; boshqa so‘rovlar — avvalgi qoida', () => {
+  const d = { id: 'r1', op: 'nc_adv_report', form: 'ACT', status: 'draft', needsList2: true, requestedBy: 'u_mm', partyType: 'employee', partyId: 'staff:st1' };
+  const l2 = { uid: 'u_acc', list2: true, cards: [] }, dir = { uid: 'u_dir', director: true, cards: [], l2Cards: [] };
+  assert.equal(canApproveAdv(d, l2), true); assert.equal(canApproveAdv(d, dir), true, 'Direktor — har qanday hisobot (avvalgi qoidada faqat 2-ro‘yxat xodimiga beriladigan pul)');
+  assert.equal(canApproveAdv(d, { uid: 'u_mm', list2: true, cards: [] }), false, 'kirituvchi');
+  assert.equal(canApproveAdv(d, { uid: 'u_x', list2: true, cards: ['staff:st1'] }), false, 'hisobdorning o‘zi (bog‘langan karta)');
+  assert.equal(canApproveAdv(d, { uid: 'u_dir', director: true, cards: ['staff:st1'] }), false, 'Direktor ham — o‘z kartasi bo‘lsa');
+  assert.equal(canApproveAdv(d, { uid: 'u_kas', operator: true, cards: [] }), false, 'kassir');
+  assert.equal(canApproveAdv(Object.assign({}, d, { status: 'posted' }), l2), false);
+  assert.equal(canApproveDoc(d, dir), true);
+  const ko2 = { id: 'c1', op: 'out_expense', form: 'KO2', status: 'draft', needsList2: true, requestedBy: 'u_kas', partyType: 'counterparty', partyId: 'cp1' };
+  assert.equal(canApproveDoc(ko2, l2), true); assert.equal(canApproveDoc(ko2, dir), false, 'Direktor — 2-ro‘yxat bosqichini emas (avvalgidek)');
+  assert.equal(canApproveDoc(Object.assign({}, ko2, { needsDirector: true }), dir), true);
+  assert.equal(canApproveDoc(null, l2), false);
+});
+test('F2.6 advSplit: qoldiq qatorlarga tartib bilan (Kt 4230), qolgani — ortiqcha sarf (Kt 6970); chegaradagi qator bo‘linadi (server qoidasi)', () => {
+  assert.deepEqual(advSplit(30000, [{ amount: 20000 }, { amount: 50000 }]), { acc: 30000, over: 40000, parts: [{ acc: 20000, over: 0 }, { acc: 10000, over: 40000 }] });
+  assert.deepEqual(advSplit(300000, [{ amount: 120000 }, { amount: 80000 }]), { acc: 200000, over: 0, parts: [{ acc: 120000, over: 0 }, { acc: 80000, over: 0 }] });
+  assert.deepEqual(advSplit(10000, [{ amount: 10000 }, { amount: 5000 }]), { acc: 10000, over: 5000, parts: [{ acc: 10000, over: 0 }, { acc: 0, over: 5000 }] });
+  assert.deepEqual(advSplit(0, [{ amount: 7000 }]).over, 7000, 'qoldiq yo‘q (server rad etadi — kassa:acc_none)');
+  assert.deepEqual(advSplit(-5, [{ amount: 'x' }, null]), { acc: 0, over: 0, parts: [{ acc: 0, over: 0 }, { acc: 0, over: 0 }] });
+});
+test('F2.6 advSuggest / advOver / advApproveText: eng eski yopilmagan avans maqsadi; hujjat suratidagi ortiqcha sarf; tasdiq oynasi matni', () => {
+  assert.equal(advSuggest({ aging: [{ day: '2027-02-01', remaining: 0, purposeArticle: 'EX-20' }, { day: '2027-02-01', remaining: 5, purposeArticle: '' }, { day: '2027-02-02', remaining: 10, purposeArticle: 'EX-32' }] }), 'EX-32');
+  assert.equal(advSuggest({ aging: [] }), ''); assert.equal(advSuggest(null), '');
+  assert.equal(advOver({ sourceSnapshot: { overspend: 40000 } }), 40000); assert.equal(advOver({}), 0);
+  const t = advApproveText({ partyName: 'Sinov Zavxoz', amount: 70000, sourceSnapshot: { overspend: 40000 } });
+  assert.ok(t.includes('Sinov Zavxoz — 70 000 so‘m') && t.includes('Ortiqcha sarf 40 000 so‘m — hisobdorga qarzimiz') && t.includes('«Buxgalteriya»ga ko‘chadi'), t);
+  assert.ok(!advApproveText({ partyName: 'X', amount: 1000 }).includes('Ortiqcha sarf'));
+});
+test('F2.6 accCardRows: avans +4230; qaytim va hisobotning 4230 qismi −4230; ortiqcha sarf +6970; qoplash −6970; ketma-ket qoldiq = kartochka jami', () => {
+  const card = { open: 35000, due: 0, items: [
+    { id: 'a1', day: '2027-02-01', form: 'KO2', op: 'out_accountable', no: 5, amount: 50000, acc: 50000, due: 0, purposeArticle: 'EX-20', basis: 'Xarid' },
+    { id: 'r1', day: '2027-02-01', form: 'ACT', op: 'nc_adv_report', no: 1, amount: 70000, acc: 50000, due: 20000 },
+    { id: 'o1', day: '2027-02-02', form: 'KO2', op: 'out_overspend', no: 6, amount: 20000, acc: 0, due: 20000 },
+    { id: 'a2', day: '2027-02-02', form: 'KO2', op: 'out_accountable', no: 7, amount: 40000, acc: 40000, due: 0 },
+    { id: 'k1', day: '2027-02-03', form: 'KO1', op: 'in_acc_return', no: 3, amount: 5000, acc: 5000, due: 0 } ] };
+  const r = accCardRows(card);
+  assert.deepEqual(r.map(x => [x.no, x.d4230, x.d6970, x.bal4230, x.bal6970]),
+    [['Ch-5', 50000, 0, 50000, 0], ['A-1', -50000, 20000, 0, 20000], ['Ch-6', 0, -20000, 0, 0], ['Ch-7', 40000, 0, 40000, 0], ['K-3', -5000, 0, 35000, 0]]);
+  assert.equal(r[r.length - 1].bal4230, card.open); assert.equal(r[r.length - 1].bal6970, card.due);
+  assert.equal(r[0].purposeArticle, 'EX-20'); assert.equal(r[0].basis, 'Xarid');
+  assert.deepEqual(accCardRows(null), []);
+});
+test('F2.6 nazorat ro‘yxati: «hisobdorlarga qarzimiz (ortiqcha sarf)» — qarz bor — diqqat; manfiy — muhim; eski server (accDue yo‘q) — qator yo‘q', () => {
+  assert.equal(by(controlRows(clean())).accDue, undefined, 'eski javob — qator qo‘shilmaydi');
+  let r = by(controlRows(Object.assign(clean(), { accDue: [] }))).accDue;
+  assert.equal(r.level, 'ok'); assert.equal(r.value, 'yo‘q');
+  r = by(controlRows(Object.assign(clean(), { accDue: [{ partyId: 'staff:st1', name: 'Sinov Zavxoz', due: 40000 }] }))).accDue;
+  assert.equal(r.level, 'warn'); assert.equal(r.value, 'Sinov Zavxoz: 40 000 so‘m');
+  r = by(controlRows(Object.assign(clean(), { accDue: [{ partyId: 'staff:st1', name: 'Sinov Zavxoz', due: -1000 }] }))).accDue;
+  assert.equal(r.level, 'bad'); assert.ok(r.value.includes('tekshiring'), r.value);
 });

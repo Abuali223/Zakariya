@@ -1597,13 +1597,16 @@ begin
     'canPost', v_block is null, 'blockReason', v_block,
     'pending', jsonb_build_object(
       -- sec-1: o'z kartasiga beriladigan pulni boshqa 2-ro'yxat xodimi tasdiqlaydi — bu xodimning navbatida yo'q; 2-ro'yxat xodimiga
-      --   beriladigan pulning 2-ro'yxat bosqichi — Direktor navbatida ham (kassa_doc_approve)
+      --   beriladigan pulning 2-ro'yxat bosqichi — Direktor navbatida ham (kassa_doc_approve). F2.6: avans hisobotini kirituvchidan boshqa
+      --   2-ro'yxat xodimi yoki Direktor tasdiqlaydi (hisobdorning o'zi emas) — Direktor navbatida ham (app.kassa_adv_approve)
       'toApprove', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'draft'
                       and ((v_l2 and c."needsList2" and c."approvedBy" is null and c."requestedBy" is distinct from v_uid
                             and not (c."partyType" = 'employee' and c."partyId" = any(v_cards)))
                         or (v_dir and c."needsDirector" and c."dirApprovedBy" is null)
                         or (v_dir and c."needsList2" and c."approvedBy" is null and c."requestedBy" is distinct from v_uid
-                            and c."partyType" = 'employee' and c."partyId" = any(v_l2cards)))),
+                            and c."partyType" = 'employee' and c."partyId" = any(v_l2cards))
+                        or (v_dir and c.op = 'nc_adv_report' and c."requestedBy" is distinct from v_uid
+                            and not (c."partyId" = any(v_cards))))),
       'waiting', (select count(*) from public.cash_docs c where c.desk = v_desk and c.status = 'draft'),
       -- F2.13: Direktor qarorini kutayotgan qayta tasnif so'rovlari (so'ragan o'zi emas — kassa-fix.sql: kassa_fix_decide)
       'fixToApprove', case when v_dir then (select count(*) from public.cash_doc_fixes f where f.desk = v_desk and f.status = 'pending'
@@ -2027,10 +2030,12 @@ begin
                                  'opening', a.op, 'issued', a.iss, 'returned', a.ret, 'reported', a.rep, 'closing', a.op + a.iss - a.ret - a.rep)
                                order by app.kassa_mask_party('employee', a.pid, null, false) ->> 'partyId', a.pid)
                             from (select c."partyId" as pid,
-                                         coalesce(sum(case when c.op = 'out_accountable' then c.amount else -c.amount end) filter (where c."businessDay" < v_from), 0) as op,
+                                         coalesce(sum(case when c.op = 'out_accountable' then c.amount else -app.kassa_acc_part(c.id, c.op, c.amount) end)
+                                                    filter (where c."businessDay" < v_from), 0) as op,
                                          coalesce(sum(c.amount) filter (where c.op = 'out_accountable' and c."businessDay" >= v_from), 0) as iss,
                                          coalesce(sum(c.amount) filter (where c.op = 'in_acc_return' and c."businessDay" >= v_from), 0) as ret,
-                                         coalesce(sum(c.amount) filter (where c.op = 'nc_adv_report' and c."businessDay" >= v_from), 0) as rep
+                                         -- F2.6: avans hisobotining 4230 qismi (ortiqcha sarf — Kt 6970, hisobdor qoldig'iga kirmaydi)
+                                         coalesce(sum(app.kassa_acc_part(c.id, c.op, c.amount)) filter (where c.op = 'nc_adv_report' and c."businessDay" >= v_from), 0) as rep
                                     from public.cash_docs c
                                    where c."partyType" = 'employee' and c.status = 'posted' and c."businessDay" <= v_to
                                      and c.op in ('out_accountable', 'in_acc_return', 'nc_adv_report')
@@ -2299,6 +2304,10 @@ begin
   v_items := v_items || jsonb_build_array((select jsonb_build_object('code', 'advances', 'n', (x ->> 'n')::int, 'sum', (x ->> 'sum')::numeric, 'asOf', v_asof,
                                                                      'level', case when (x ->> 'n')::int = 0 then 'ok' else 'warn' end)
                                              from (select app.kassa_acc_overdue(v_desk, v_asof) as x) q));
+  -- F2.6: tasdiq kutayotgan avans hisobotlari (kiritilgan, hali o'tkazilmagan): tasdiqlansa xarajat TASDIQ kuni bilan yoziladi — oy
+  --   yopilishidan oldin tasdiqlash yoki rad etish kerak (aks holda xarajat keyingi oyga tushadi); soni va summasi — ismsiz
+  select count(*), coalesce(sum(c.amount), 0) into v_n, v_s from public.cash_docs c where c.desk = v_desk and c.op = 'nc_adv_report' and c.status = 'draft';
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'advPending', 'n', v_n, 'sum', v_s, 'level', case when v_n = 0 then 'ok' else 'warn' end));
   -- kassa limitidan oshgan kun oxiri qoldiqlari
   select coalesce(jsonb_agg(d.day order by d.day), '[]'::jsonb) into v_days
     from public.cash_days d where d.desk = v_desk and d.status <> 'open' and d.day between v_from and v_to
@@ -2365,7 +2374,7 @@ language sql stable security definer set search_path = public, app, pg_temp as $
                     sum(c.amount) over (partition by c."partyId" order by c."businessDay", c."postedAt", c.id) as cum
                from public.cash_docs c where c.desk = p_desk and c.op = 'out_accountable' and c.status = 'posted' and c."businessDay" <= p_asof),
        r as (select c."partyId" as pid, max(c."partyName") as nm, coalesce(sum(c.amount) filter (where c.op = 'in_acc_return'), 0) as ret,
-                    coalesce(sum(c.amount) filter (where c.op = 'nc_adv_report'), 0) as rep
+                    coalesce(sum(app.kassa_acc_part(c.id, c.op, c.amount)) filter (where c.op = 'nc_adv_report'), 0) as rep   -- F2.6: 4230 qismi
                from public.cash_docs c
               where c.desk = p_desk and c.op in ('in_acc_return', 'nc_adv_report') and c.status = 'posted' and c."businessDay" <= p_asof
               group by 1),
@@ -2383,6 +2392,23 @@ language sql stable security definer set search_path = public, app, pg_temp as $
                      from o where o.given - o.ret - o.rep <> 0), '[]'::jsonb)
 $$;
 revoke all on function app.kassa_accountables(text, date) from public, anon, authenticated;
+
+-- Hisobdorning yopilmagan avanslari (FIFO, F2.6): naqd qaytim va avans hisobotlarining 4230 qismi eng eski avansdan boshlab yopadi; har avans —
+--   qolgani (remaining) va taxminiy maqsadi (out_accountable "sourceSnapshot".purposeArticle). Doira — sinov kassasisiz (app.kassa_acc_open
+--   bilan bir xil). RP-07 hisobdor kartochkasi (kassa_acc_card) va avans hisoboti oynasidagi statiya taklifi shundan.
+create or replace function app.kassa_acc_fifo(p_party text)
+returns table(doc_id text, day date, no int, amount numeric, purpose text, remaining numeric)
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  with adv as (select c.id, c."businessDay" as d, c.no, c.amount, c."sourceSnapshot" ->> 'purposeArticle' as purpose,
+                      coalesce(sum(c.amount) over (order by c."businessDay", c."postedAt", c.id rows between unbounded preceding and 1 preceding), 0) as before
+                 from public.cash_docs c join public.cash_desks k on k.id = c.desk and not k."isTest"
+                where c."partyType" = 'employee' and c."partyId" = p_party and c.op = 'out_accountable' and c.status = 'posted'),
+       cov as (select coalesce(sum(app.kassa_acc_part(c.id, c.op, c.amount)), 0) as s
+                 from public.cash_docs c join public.cash_desks k on k.id = c.desk and not k."isTest"
+                where c."partyType" = 'employee' and c."partyId" = p_party and c.op in ('in_acc_return', 'nc_adv_report') and c.status = 'posted')
+  select adv.id, adv.d, adv.no, adv.amount, adv.purpose, least(adv.amount, greatest(adv.before + adv.amount - cov.s, 0)) from adv, cov
+$$;
+revoke all on function app.kassa_acc_fifo(text) from public, anon, authenticated;
 
 -- Muddati o'tgan avans hisobotlari soni va summasi (eslatmalar — F1.24: «Kassa» sahifasi va Telegram nazorat qatori).
 create or replace function app.kassa_acc_overdue(p_desk text, p_asof date) returns jsonb
@@ -2647,6 +2673,14 @@ begin
     -- hisobdorlardagi pul (4230): app.kassa_accountables — berilgan − naqd qaytarilgan − avans hisobotlari; hisobot muddati — 3 ish kuni (§4.9);
     --   manfiy qoldiq ham («negative»)
     'accountable', app.kassa_accountables(v_desk, v_today),
+    -- F2.6: hisobdorlarga qarzimiz (6970): tasdiqlangan avans hisobotidagi ortiqcha sarf − «Ortiqcha sarfni qoplash» orderlari
+    'accDue', coalesce((select jsonb_agg(jsonb_build_object('partyId', x.pid, 'name', coalesce(app.kassa_party_label('employee', x.pid), x.nm, ''), 'due', x.due)
+                                         order by x.pid)
+                          from (select c."partyId" as pid, max(c."partyName") as nm, app.kassa_acc_due(c."partyId", v_desk) as due
+                                  from public.cash_docs c
+                                 where c."partyType" = 'employee' and c.op in ('nc_adv_report', 'out_overspend') and c.status = 'posted'
+                                 group by c."partyId") x
+                         where x.due <> 0), '[]'::jsonb),
     -- xodimlar zimmasidagi kamomad (4730, acc-4): Direktor qarori bilan yozilgan − kassaga qoplangani («Kamomadni qoplash (xodim)»);
     --   qolgani — qoplash orderi yoki ish haqidan ushlash (buxgalter). Xodim kartasiga bog'lanmagan kassir qarori («boshqa» tomon,
     --   kassadan qoplab bo'lmaydi) ham ismi bilan ko'rinadi ("linked": false). Doira — app.kassa_damage_open bilan bir xil.
@@ -2690,6 +2724,60 @@ begin
 end $$;
 revoke all on function public.kassa_checks(text) from public, anon;
 grant execute on function public.kassa_checks(text) to authenticated;
+
+-- ---------- O'qish: RP-07 — hisobdor kartochkasi (F2.6) ----------
+--   p_party bo'sh — ro'yxat: hisobdor qoldig'i (4230), hisobdorga qarzimiz (6970) yoki tasdiq kutayotgan avans hisoboti bor xodimlar — eng eski
+--   yopilmagan avans sanasi, ish kunlarida yoshi, muddati o'tganlik (3 ish kuni, §4.9 / FD-14; maktabning dam olish kunlari sanalmaydi).
+--   p_party berilsa — bitta xodim: qoldiqlar, yopilmagan avanslar (FIFO, maqsadi bilan), tasdiq kutayotgan hisobot, barcha o'tkazilgan
+--   hujjatlar (avans, qaytim, avans hisoboti — 4230 va 6970 qismlari, ortiqcha sarfni qoplash). Doira — sinov kassasisiz. Kim: kassa
+--   hujjatlarini ko'radiganlar (kassir, g'aznachi, Moliya menejeri, buxgalter, Direktor).
+create or replace function public.kassa_acc_card(p_party text default null) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_today date := app.fin_today(); v_pid text; v_name text;
+begin
+  if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  if nullif(btrim(coalesce(p_party, '')), '') is null then
+    return jsonb_build_object('ok', true, 'today', v_today, 'list', coalesce((
+      select jsonb_agg(jsonb_build_object('partyId', x.pid, 'name', coalesce(app.kassa_party_label('employee', x.pid), x.nm, ''),
+                                          'open', x.open, 'due', x.due, 'pending', x.pend > 0, 'since', a.since,
+                                          'workDays', case when a.since is not null then jsonb_array_length(app.school_days(a.since + 1, v_today)) end,
+                                          'overdue', a.since is not null and jsonb_array_length(app.school_days(a.since + 1, v_today)) > 3)
+                       order by a.since nulls last, x.pid)
+        from (select c."partyId" as pid, max(c."partyName") as nm, app.kassa_acc_open(c."partyId") as open, app.kassa_acc_due(c."partyId") as due,
+                     count(*) filter (where c.op = 'nc_adv_report' and c.status = 'draft') as pend
+                from public.cash_docs c join public.cash_desks k on k.id = c.desk and not k."isTest"
+               where c."partyType" = 'employee' and c.op in ('out_accountable', 'in_acc_return', 'nc_adv_report', 'out_overspend')
+                 and c.status in ('posted', 'draft')
+               group by c."partyId") x
+        left join lateral (select min(f.day) as since from app.kassa_acc_fifo(x.pid) f where f.remaining > 0) a on true
+       where x.open <> 0 or x.due <> 0 or x.pend > 0), '[]'::jsonb));
+  end if;
+  select k.o_id, k.o_name into v_pid, v_name from app.kassa_party('employee', p_party, null) k;
+  return jsonb_build_object('ok', true, 'today', v_today,
+    'party', jsonb_build_object('id', v_pid, 'name', coalesce(app.kassa_party_label('employee', v_pid), v_name), 'left', app.kassa_emp_left(v_pid)),
+    'open', app.kassa_acc_open(v_pid), 'due', app.kassa_acc_due(v_pid),
+    'aging', coalesce((select jsonb_agg(jsonb_build_object('docId', f.doc_id, 'day', f.day, 'no', f.no, 'amount', f.amount, 'remaining', f.remaining,
+                                                          'purposeArticle', f.purpose, 'workDays', jsonb_array_length(app.school_days(f.day + 1, v_today)),
+                                                          'overdue', jsonb_array_length(app.school_days(f.day + 1, v_today)) > 3)
+                                        order by f.day, f.no)
+                         from app.kassa_acc_fifo(v_pid) f where f.remaining > 0), '[]'::jsonb),
+    'pending', (select jsonb_build_object('id', c.id, 'amount', c.amount, 'createdAt', c."createdAt", 'requestedBy', c."requestedBy",
+                                          'requestedByName', app.kassa_names(array[c."requestedBy"]) ->> c."requestedBy",
+                                          'overspend', coalesce((c."sourceSnapshot" ->> 'overspend')::numeric, 0))
+                  from public.cash_docs c where c.op = 'nc_adv_report' and c.status = 'draft' and c."partyId" = v_pid order by c."createdAt" limit 1),
+    'items', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'day', c."businessDay", 'form', c.form, 'op', c.op, 'series', c.series, 'no', c.no,
+                                                          'amount', c.amount,
+                                                          'acc', case when c.op = 'out_overspend' then 0 else app.kassa_acc_part(c.id, c.op, c.amount) end,
+                                                          'due', case c.op when 'nc_adv_report' then c.amount - app.kassa_acc_part(c.id, c.op, c.amount)
+                                                                           when 'out_overspend' then c.amount else 0 end,
+                                                          'basis', c.basis, 'purposeArticle', c."sourceSnapshot" ->> 'purposeArticle')
+                                        order by c."businessDay", c."postedAt", c.id)
+                         from public.cash_docs c join public.cash_desks k on k.id = c.desk and not k."isTest"
+                        where c."partyType" = 'employee' and c."partyId" = v_pid and c.status = 'posted'
+                          and c.op in ('out_accountable', 'in_acc_return', 'nc_adv_report', 'out_overspend')), '[]'::jsonb));
+end $$;
+revoke all on function public.kassa_acc_card(text) from public, anon;
+grant execute on function public.kassa_acc_card(text) to authenticated;
 
 -- ---------- Direktorning kunlik Telegram hisoboti uchun kassa bloki va nazorat qatori (RP-05) ----------
 --   director_daily (telegram.sql) shu funksiyani DINAMIK chaqiradi: kassa moduli o'rnatilmagan bo'lsa — blok yo'q.

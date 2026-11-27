@@ -36,6 +36,10 @@
 #       fin:cp_changed.
 #   (17) F2.13 qayta tasnif dalolatnomasi: o'sha hujjatga 8 seans so'rov — bittasi, qolganlari kassa:fix_pending; tasdiq va bekor qilish
 #       parallel — faqat bitta o'tish (raqam va «Buxgalteriya» qatori holatga mos); ikki hujjat parallel tasdiqlansa — raqamlar takrorsiz.
+#   (18) F2.6 avans hisoboti (ikki bosqich) va ortiqcha sarf: o'sha hisobdorga 8 seans hisobot — bittasi, qolganlari kassa:adv_pending;
+#       tasdiq va rad parallel — bitta o'tish; tasdiq va o'sha hisobdordan qaytim parallel — bittasi o'tadi (ikkinchisi kassa:acc_over yoki
+#       kassa:adv_stale); qarzdan ko'p «Ortiqcha sarfni qoplash» parallel — sig'gani o'tadi, qarz manfiy emas; hisobotni bekor qilish va
+#       qoplash parallel — bittasi (kassa:due_used / kassa:due_over); hech qayerda deadlock yo'q (hisobdor qulfi qator qulfidan oldin).
 #   FAQAT bo'sh sinov bazasida («--dev» zanjiri qurilgan). Baza o'zgaradi — tashlab yuboriladigan baza.
 #   Ishlatish:  PSQL_CMD="psql -h <host> -U postgres" bash migration/test-kassa-race.sh <baza>
 #   Natija: har tekshiruv PASS/FAIL; xato bo'lsa chiqish kodi 1.
@@ -662,6 +666,89 @@ wait
 chk "17c ikki hujjat, parallel tasdiq: raqamlar ketma-ket va takrorsiz, hisoblagich mos; deadlock yo'q" \
     "$(cat "$TMP"/17c.a "$TMP"/17c.b | grep -E '^[0-9]+$' | sort -n | paste -sd, -)/$(q -c "select \"lastNo\" from public.doc_counters where desk = 'r17' and series = 'FIX'")/$(cat "$TMP"/17c.* | grep -ci 'deadlock')" \
     "$((N17 + 1)),$((N17 + 2))/$((N17 + 2))/0"
+# ---------- (18) F2.6: avans hisoboti (ikki bosqich), ortiqcha sarf (6970) va «Ortiqcha sarfni qoplash» ----------
+#   Alohida haqiqiy (sinov emas) kassa r18 — pul shu kassadan beriladi va qabul qilinadi; avans hisoboti doim asosiy kassada (dalolatnoma).
+#   Hisobdorlar: r_st18 (a–d), r_st19 (e). Kirituvchi — buxgalter (R_ACC), tasdiqlovchi — Moliya menejeri (R_FM), rad etuvchi — Direktor.
+q >/dev/null <<'SQL'
+set session_replication_role = replica;
+insert into public.users (id, email, role, status, "extraRoles") values ('R_ACC','ra@x','accountant','active','[]') on conflict (id) do nothing;
+insert into public.staff (id, "staffId", name, position) values ('r_st18','IQX-R18','Poyga Hisobdor','Zavxoz'), ('r_st19','IQX-R19','Poyga Hisobdor Ikki','Zavxoz')
+  on conflict (id) do nothing;
+insert into public.cash_desks (id, name, "isTest") values ('r18', 'Poyga 18', false) on conflict (id) do nothing;
+update public.fin_org set "kassaGoLive" = least(coalesce("kassaGoLive", app.fin_today()), app.fin_today()) where id = 'main';
+SQL
+D18=$(q -c "select app.fin_today()")
+chk "18 kassa r18 ishga tushdi (boshlang'ich qoldiq 2 000 000)" "$(call_as R_DIR "public.kassa_opening_set('{\"desk\":\"r18\",\"amount\":2000000,\"startDay\":\"$D18\"}') ->> 'ok'")" "true"
+req18(){   # $1 op, $2 xodim, $3 clientRef, $4 summa -> so'rov id (r18 kassasi; 2-ro'yxat va Direktor tasdiqlaydi — avvalgi bo'limlar T1 = 0 qilgan)
+  local id
+  id=$(call_as R_KAS "public.kassa_payout_request('{\"desk\":\"r18\",\"op\":\"$1\",\"amount\":$4,\"partyType\":\"employee\",\"partyId\":\"staff:$2\",\"basis\":\"Poyga\",\"clientRef\":\"$3\"}'::jsonb) ->> 'id'")
+  call_as R_FM "public.kassa_doc_approve('$id') ->> 'status'" >/dev/null
+  call_as R_DIR "public.kassa_doc_approve('$id') ->> 'status'" >/dev/null
+  echo "$id"
+}
+rep18(){   # $1 uid, $2 xodim, $3 clientRef, $4 summa -> kassa_adv_report chiqishi (holat yoki xato)
+  call_raw "$1" "public.kassa_adv_report(jsonb_build_object('clientRef', '$3', 'partyId', 'staff:$2', 'reportDate', '$D18', 'lines', jsonb_build_array(jsonb_build_object('articleId', 'EX-20', 'amount', $4, 'note', 'Poyga cheki')))) ->> 'status'"
+}
+open18(){ q -c "select trim_scale(app.kassa_acc_open('staff:$1')) || '/' || trim_scale(app.kassa_acc_due('staff:$1'))"; }
+A18=$(req18 out_accountable r_st18 r18-adv-0001 300000)
+chk "18 hisobdorga avans berildi (300 000)" "$(call_as R_KAS "public.kassa_doc_pay('$A18') ->> 'status'")/$(open18 r_st18)" "posted/300000/0"
+# (a) o'sha hisobdorga 8 seans hisobot kiritadi
+for i in $(seq 1 8); do ( rep18 R_ACC r_st18 "r18a-ref-$i" 100000 > "$TMP/18a.$i" ) & done
+wait
+chk "18a o'sha hisobdor, 8 seans: bitta hisobot (tasdiq kutadi), 7 tasi kassa:adv_pending; deadlock yo'q" \
+    "$(cat "$TMP"/18a.* | grep -c '^draft$')/$(cat "$TMP"/18a.* | grep -c 'kassa:adv_pending')/$(q -c "select count(*) from public.cash_docs where op = 'nc_adv_report' and \"partyId\" = 'staff:r_st18'")/$(cat "$TMP"/18a.* | grep -ci 'deadlock')" \
+    "1/7/1/0"
+R18=$(q -c "select id from public.cash_docs where op = 'nc_adv_report' and \"partyId\" = 'staff:r_st18' and status = 'draft'")
+# (b) tasdiq (4) va rad (4) parallel
+for i in 1 2 3 4; do
+  ( call_raw R_FM "public.kassa_doc_approve('$R18') ->> 'status'" > "$TMP/18b.a$i" ) &
+  ( call_raw R_DIR "public.kassa_doc_reject('$R18', 'Poyga rad') ->> 'status'" > "$TMP/18b.r$i" ) &
+done
+wait
+ST18=$(q -c "select status from public.cash_docs where id = '$R18'")
+if [ "$ST18" = "posted" ]; then EXP18="posted/4/0/1/200000/0"; else EXP18="rejected/0/4/0/300000/0"; fi
+chk "18b tasdiq (4) va rad (4) parallel: bitta o'tish; xarajat va qoldiq holatga mos; deadlock yo'q ($ST18)" \
+    "$ST18/$(cat "$TMP"/18b.a* | grep -c '^posted$')/$(cat "$TMP"/18b.r* | grep -c '^rejected$')/$(q -c "select count(*) from public.expenses where \"cashDocId\" = '$R18'")/$(open18 r_st18)$(cat "$TMP"/18b.* | grep -ci 'deadlock' | sed 's/^0$//')" \
+    "$EXP18"
+# (c) ortiqcha sarfli hisobot tasdig'i va o'sha hisobdordan qaytim parallel
+O18=$(q -c "select trim_scale(app.kassa_acc_open('staff:r_st18'))")
+R18c=$(call_as R_ACC "public.kassa_adv_report(jsonb_build_object('clientRef', 'r18c-ref-1', 'partyId', 'staff:r_st18', 'reportDate', '$D18', 'lines', jsonb_build_array(jsonb_build_object('articleId', 'EX-16', 'amount', $((O18 + 50000)), 'note', 'Poyga cheki')))) ->> 'id'")
+( call_raw R_FM "public.kassa_doc_approve('$R18c') ->> 'status'" > "$TMP/18c.a" ) &
+( call_raw R_KAS "public.kassa_receipt('{\"desk\":\"r18\",\"op\":\"in_acc_return\",\"amount\":10000,\"partyType\":\"employee\",\"partyId\":\"staff:r_st18\",\"basis\":\"Poyga qaytimi\",\"clientRef\":\"r18c-ret-1\"}'::jsonb) ->> 'status'" > "$TMP/18c.r" ) &
+wait
+SC18=$(q -c "select status from public.cash_docs where id = '$R18c'")
+if [ "$SC18" = "posted" ]; then EXC18="posted/acc_over/0/50000"; else EXC18="draft/posted/$((O18 - 10000))/0"; fi
+chk "18c tasdiq va qaytim parallel: bittasi o'tadi (tasdiqdan keyin qaytim — kassa:acc_over, qaytimdan keyin tasdiq — kassa:adv_stale); qoldiq va qarz mos; deadlock yo'q ($SC18)" \
+    "$SC18/$(grep -qx posted "$TMP/18c.r" && echo posted || (grep -q 'kassa:acc_over' "$TMP/18c.r" && echo acc_over || echo '?'))/$(open18 r_st18)$( [ "$SC18" = draft ] && ! grep -q 'kassa:adv_stale' "$TMP/18c.a" && echo ' (tasdiq kassa:adv_stale emas)')$(cat "$TMP"/18c.* | grep -ci 'deadlock' | sed 's/^0$//')" \
+    "$EXC18"
+if [ "$SC18" = "draft" ]; then   # eskirgan hisobot bekor qilinib, yangi qoldiq bilan qayta kiritiladi (qarz 50 000 bo'lsin)
+  call_as R_ACC "public.kassa_doc_cancel('$R18c', 'Qoldiq o''zgardi') ->> 'status'" >/dev/null
+  O18=$(q -c "select trim_scale(app.kassa_acc_open('staff:r_st18'))")
+  R18c=$(call_as R_ACC "public.kassa_adv_report(jsonb_build_object('clientRef', 'r18c-ref-2', 'partyId', 'staff:r_st18', 'reportDate', '$D18', 'lines', jsonb_build_array(jsonb_build_object('articleId', 'EX-16', 'amount', $((O18 + 50000)), 'note', 'Poyga cheki')))) ->> 'id'")
+  call_as R_FM "public.kassa_doc_approve('$R18c') ->> 'status'" >/dev/null
+fi
+chk "18c' ortiqcha sarfli hisobot o'tkazilgan: qoldiq 0, hisobdorga qarzimiz 50 000" "$(q -c "select status from public.cash_docs where id = '$R18c'")/$(open18 r_st18)" "posted/0/50000"
+# (d) qarzdan ko'p «Ortiqcha sarfni qoplash» parallel (4 × 20 000, qarz 50 000)
+for i in 1 2 3 4; do echo "$(req18 out_overspend r_st18 "r18d-ref-$i" 20000)" > "$TMP/18d.id$i"; done
+for i in 1 2 3 4; do ( call_raw R_KAS "public.kassa_doc_pay('$(cat "$TMP/18d.id$i")') ->> 'status'" > "$TMP/18d.p$i" ) & done
+wait
+chk "18d to'rtta qoplash (20 000) parallel, qarz 50 000: ikkitasi o'tdi, ikkitasi kassa:due_over; qarz 10 000 (manfiy emas); deadlock yo'q" \
+    "$(cat "$TMP"/18d.p* | grep -c '^posted$')/$(cat "$TMP"/18d.p* | grep -c 'kassa:due_over')/$(open18 r_st18)/$(cat "$TMP"/18d.p* | grep -ci 'deadlock')" \
+    "2/2/0/10000/0"
+# (e) ortiqcha sarfli hisobotni bekor qilish va qoplash orderini berish parallel (boshqa hisobdor)
+A19=$(req18 out_accountable r_st19 r19-adv-0001 40000); call_as R_KAS "public.kassa_doc_pay('$A19') ->> 'status'" >/dev/null
+R19=$(call_as R_ACC "public.kassa_adv_report(jsonb_build_object('clientRef', 'r19-ref-1', 'partyId', 'staff:r_st19', 'reportDate', '$D18', 'lines', jsonb_build_array(jsonb_build_object('articleId', 'EX-20', 'amount', 70000, 'note', 'Poyga cheki')))) ->> 'id'")
+call_as R_FM "public.kassa_doc_approve('$R19') ->> 'status'" >/dev/null
+P19=$(req18 out_overspend r_st19 r19-ovr-0001 30000)
+chk "18e tayyorgarlik: hisobot o'tkazilgan (qarz 30 000), qoplash orderi tasdiqlangan" "$(q -c "select status from public.cash_docs where id = '$R19'")/$(q -c "select status from public.cash_docs where id = '$P19'")/$(open18 r_st19)" "posted/approved/0/30000"
+( call_raw R_FM "public.kassa_adv_report_void('$R19', 'Poyga bekor') ->> 'status'" > "$TMP/18e.v" ) &
+( call_raw R_KAS "public.kassa_doc_pay('$P19') ->> 'status'" > "$TMP/18e.p" ) &
+wait
+SV19=$(q -c "select status from public.cash_docs where id = '$R19'"); SP19=$(q -c "select status from public.cash_docs where id = '$P19'")
+if [ "$SV19" = "void" ]; then EXE19="void/approved/due_over/40000/0"; else EXE19="posted/posted/due_used/0/0"; fi
+chk "18e bekor qilish va qoplash parallel: bittasi o'tadi (bekordan keyin qoplash — kassa:due_over, qoplashdan keyin bekor — kassa:due_used); qarz manfiy emas; deadlock yo'q ($SV19)" \
+    "$SV19/$SP19/$(cat "$TMP"/18e.v "$TMP"/18e.p | grep -o 'kassa:due_[a-z]*' | head -1 | sed 's/kassa://')/$(open18 r_st19)$(cat "$TMP"/18e.* | grep -ci 'deadlock' | sed 's/^0$//')" \
+    "$EXE19"
 rm -rf "$TMP"
 echo "JAMI: $pass/$((pass+fail)) o'tdi"
 [ "$fail" = 0 ]

@@ -460,7 +460,7 @@ begin
   v_code := app.kassa_payee_code(v_pid);
   v_test := coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false);
   return jsonb_build_object('ok', true, 'partyId', v_pid, 'name', v_name, 'code', v_code, 'month', v_m, 'testDesk', v_test,
-    'accountable', app.kassa_acc_open(v_pid, v_desk), 'damage', app.kassa_damage_open(v_pid, v_desk),
+    'accountable', app.kassa_acc_open(v_pid, v_desk), 'due', app.kassa_acc_due(v_pid, v_desk), 'damage', app.kassa_damage_open(v_pid, v_desk),
     'advance', case when v_m is not null and not v_test then
                  (select jsonb_build_object('given', coalesce(sum(a.amount) filter (where a.amount > 0), 0),
                                             'returned', coalesce(-sum(a.amount) filter (where a.amount < 0), 0),
@@ -830,7 +830,7 @@ language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_op text; v_snap jsonb; v_party text; v_code text;
 begin
   select c.op, c."sourceSnapshot", c."partyId" into v_op, v_snap, v_party from public.cash_docs c where c.id = p_doc_id;
-  if v_op in ('out_accountable', 'in_acc_return') then   -- hisobdor qulfi (avans hisoboti bilan bir navbat): qoldiq tekshiruvi va to'lov orasida o'zgarmasin
+  if v_op in ('out_accountable', 'in_acc_return', 'out_overspend') then   -- hisobdor qulfi (avans hisoboti bilan bir navbat): qoldiq tekshiruvi va to'lov orasida o'zgarmasin
     perform pg_advisory_xact_lock(hashtext('iqror_acc:' || coalesce(v_party, '')));
   end if;
   if v_op = 'in_damage_repay' then   -- xodim zimmasidagi kamomad: ikki qoplash parallel o'tib, qoldiqdan oshib ketmasin (acc-4)
@@ -917,6 +917,13 @@ begin
     if v_open < 0 then
       raise exception 'Qoplash summasi (% so''m) xodim zimmasidagi kamomad qoldig''idan katta (qoldiq % so''m)', v_doc.amount, v_open + v_doc.amount
         using errcode = 'P0001', hint = 'kassa:damage_over';
+    end if;
+    return;
+  elsif v_doc.op = 'out_overspend' then   -- F2.6: ortiqcha sarfni qoplash hisobdorga qarzimizdan (6970) oshmaydi
+    v_open := app.kassa_acc_due(v_doc."partyId", v_doc.desk);   -- shu to'lov bilan
+    if v_open < 0 then
+      raise exception 'Summa (% so''m) hisobdorga qarzimizdan (ortiqcha sarf: % so''m) katta', v_doc.amount, v_open + v_doc.amount
+        using errcode = 'P0001', hint = 'kassa:due_over';
     end if;
     return;
   end if;
@@ -1266,27 +1273,30 @@ end $$;
 revoke all on function public.kassa_offset_void(text, text) from public, anon;
 grant execute on function public.kassa_offset_void(text, text) to authenticated;
 
--- ---------- Avans hisoboti (АО-1, minimal): hisobdor shaxs sarflagan pul — NAQDSIZ dalolatnoma ----------
---   Qog'ozdagi avans hisoboti (cheklar bilan; shakllar.md, Sh-1) bo'yicha buxgalter, Moliya menejeri yoki Direktor kiritadi.
---   BITTA tranzaksiyada: dalolatnoma (ACT; kassa kitobiga kirmaydi) — har qator Dt statiya hisobvarag'i Kt 4230 (hisobdor
---   bo'yicha) + har qator «Buxgalteriya»dagi xarajat (usul 'accountable', shu hujjatga bog'langan; toifa — app.kassa_exp_category). Hisobot
---   summasi hisobdordagi hisobot qilinmagan qoldiqdan oshmaydi: ortiqcha sarf hozircha alohida «Xarajat» orderi bilan beriladi (to'liq
---   versiya — F2.6).
+-- ---------- Avans hisoboti (АО-1): hisobdor shaxs sarflagan pul — NAQDSIZ dalolatnoma, ikki bosqichda (F2.6) ----------
+--   Qog'ozdagi avans hisoboti (cheklar bilan; shakllar.md, Sh-1) bo'yicha buxgalter, Moliya menejeri yoki Direktor KIRITADI — dalolatnoma
+--   (ACT; kassa kitobiga kirmaydi) tasdiq kutadi (draft, «needsList2»); BOSHQA 2-ro'yxat xodimi yoki Direktor TASDIQLAYDI (kassa_doc_approve
+--   -> app.kassa_adv_approve: tasdiq bilan o'tkaziladi, har qator «Buxgalteriya»ga xarajat bo'lib ko'chadi — usul 'accountable', shu hujjatga
+--   bog'langan, toifa — app.kassa_exp_category); rad etish — kassa_doc_reject, kirituvchi (yoki Direktor) bekor qiladi — kassa_doc_cancel.
+--   Har qator Dt statiya hisobvarag'i Kt 4230 (hisobdor bo'yicha). ORTIQCHA SARF (F2.6): hisobot hisobdordagi qoldiqdan katta bo'lsa — qoldiq
+--   qatorlarga tartib bilan taqsimlanadi (Kt 4230), qolgani Kt 6970 (hisobdorga qarzimiz; chegaradagi qator ikkiga bo'linadi); qarz
+--   «Ortiqcha sarfni qoplash» chiqim orderi (out_overspend, Dt 6970 Kt 5010) bilan beriladi. Avans umuman bo'lmagan xodimga hisobot — yo'q.
+--   Bir hisobdorda bir vaqtda bitta tasdiq kutayotgan hisobot (kassa:adv_pending). Tasdiq paytida hisobdor qoldig'i kiritilgandagidan boshqa
+--   bo'lsa (orada avans berilgan yoki qaytim olingan) — rad (kassa:adv_stale): hisobot bekor qilinib, qayta kiritiladi (qatorlar o'zgarmaydi).
 --   Statiyalar (acc-5; kassa-docs.sql: app.kassa_adv_article — shakldagi ro'yxat ham shundan): EX — kassadan xarajat qilinadiganlari
 --   (ish haqi, soliq, eskirish, bank komissiyasi, jarima kabilar — yo'q), OP-18 (asosiy vosita — Dt 0820) va OP-24 (sotish uchun tovar —
 --   Dt 2910), reja §4.4 da Kt 4230 bilan provodkasi borlari. OP-17 (yetkazib beruvchi bilan hisob-kitob) va boshqa OP — yo'q.
 --   p: clientRef, partyId (xodim: 'teachers:<id>' | 'staff:<id>'), reportDate (qog'ozdagi hisobot sanasi, 92 kun ichida),
 --      basis (ixtiyoriy izoh), lines: [{articleId, amount, note — chek yoki hujjat}], 1–40 qator. O'sha kalit bilan qayta yuborishda mazmuni
 --      (qatorlar ham) boshqa bo'lsa — kassa:ref_mismatch (state-9: kanonik izi "reqHash" hujjatda saqlanadi).
---   sec-1: hisobdor — kirituvchining o'zi (bog'langan xodim kartalaridan biri, app.kassa_user_cards) bo'lsa — rad: o'z avansini o'zi hisobdan chiqarmaydi,
---   hisobotni boshqa 2-ro'yxat xodimi yoki Direktor kiritadi (ikkinchi shaxs tasdig'i — 2-bosqich, F2.6).
+--   sec-1: hisobdor — kirituvchining yoki tasdiqlovchining o'zi (bog'langan xodim kartalaridan biri, app.kassa_user_cards) bo'lsa — rad.
 create or replace function public.kassa_adv_report(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_ref text; v_pid text; v_pname text; v_rep text; v_basis text; v_today date := app.fin_today();
   v_lines jsonb := '[]'::jsonb; v_line jsonb; v_i int := 0; v_amt numeric; v_total numeric := 0; v_art public.fin_articles%rowtype;
-  v_note text; v_open numeric; v_doc_id text; v_dup boolean; v_doc public.cash_docs%rowtype; v_ex public.cash_docs%rowtype; l record; v_cat text; v_lbl text;
-  v_hash text;
+  v_note text; v_open numeric; v_doc_id text; v_dup boolean; v_ex public.cash_docs%rowtype;
+  v_hash text; v_over numeric; v_left numeric; v_split jsonb := '[]'::jsonb;
 begin
   if not (app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: avans hisobotini buxgalter, Moliya menejeri yoki Direktor kiritadi' using errcode = '42501';
@@ -1346,37 +1356,95 @@ begin
     return app.kassa_doc_json(v_ex.id) || jsonb_build_object('ok', true, 'dup', true);
   end if;
   perform pg_advisory_xact_lock(hashtext('iqror_acc:' || v_pid));   -- hisobdor qulfi (avans to'lovi bilan bir navbat) — kassa qulfidan oldin
+  select * into v_ex from public.cash_docs c where c.op = 'nc_adv_report' and c.status = 'draft' and c."partyId" = v_pid order by c."createdAt" limit 1;
+  if found then
+    raise exception 'Bu hisobdorning avans hisoboti (% so''m, %) tasdiq kutmoqda — avval uni tasdiqlang, rad eting yoki bekor qiling',
+      trim_scale(v_ex.amount), to_char(v_ex."createdAt" at time zone 'Asia/Tashkent', 'DD.MM.YYYY HH24:MI') using errcode = 'P0001', hint = 'kassa:adv_pending';
+  end if;
   v_open := app.kassa_acc_open(v_pid);
   if v_open <= 0 then
     raise exception 'Bu xodimda hisobot qilinmagan avans yo''q' using errcode = 'P0001', hint = 'kassa:acc_none';
   end if;
-  if v_total > v_open then
-    raise exception 'Hisobot summasi (% so''m) hisobdordagi qoldiqdan (% so''m) katta: ortiqcha sarfni alohida «Xarajat» orderi bilan bering', v_total, v_open
-      using errcode = 'P0001', hint = 'kassa:acc_over';
-  end if;
+  -- ortiqcha sarf: qoldiq qatorlarga tartib bilan (Kt 4230), qolgani Kt 6970; chegaradagi qator ikkiga bo'linadi
+  v_over := greatest(v_total - v_open, 0);
+  v_left := v_open;
+  for v_line in select x from jsonb_array_elements(v_lines) x loop
+    v_amt := (v_line ->> 'amount')::numeric;
+    if v_left >= v_amt then
+      v_split := v_split || jsonb_build_array(v_line); v_left := v_left - v_amt;
+    elsif v_left > 0 then
+      v_split := v_split || jsonb_build_array(jsonb_set(v_line, '{amount}', to_jsonb(v_left)),
+                                              jsonb_set(jsonb_set(jsonb_set(v_line, '{amount}', to_jsonb(v_amt - v_left)), '{credit}', '"6970"'),
+                                                        '{analytics,kind}', '"overspend"'));
+      v_left := 0;
+    else
+      v_split := v_split || jsonb_build_array(jsonb_set(jsonb_set(v_line, '{credit}', '"6970"'), '{analytics,kind}', '"overspend"'));
+    end if;
+  end loop;
 
   perform app.kassa_flag(true);
   select b.o_id, b.o_dup into v_doc_id, v_dup from app.kassa_doc_build(jsonb_build_object(
       'desk', 'main', 'op', 'nc_adv_report', 'amount', v_total, 'partyType', 'employee', 'partyId', v_pid,
       'basis', left('Avans hisoboti ' || to_char(v_rep::date, 'DD.MM.YYYY') || case when v_basis <> '' then '; ' || v_basis else '' end, 500),
-      'attachment', 'Cheklar va hujjatlar: ' || v_i || ' ta', 'clientRef', v_ref, 'reqHash', v_hash,
-      'sourceSnapshot', jsonb_build_object('reportDate', v_rep, 'openBefore', v_open, 'openAfter', v_open - v_total),
-      'lines', v_lines), 'ACT', v_uid, true) b;
-  v_doc := app.kassa_act_post(v_doc_id, v_uid, v_today);   -- L4, L5
+      'attachment', 'Cheklar va hujjatlar: ' || v_i || ' ta', 'clientRef', v_ref, 'reqHash', v_hash, 'needsList2', true,
+      'sourceSnapshot', jsonb_build_object('reportDate', v_rep, 'openBefore', v_open, 'openAfter', v_open - (v_total - v_over),
+                                           'overspend', v_over, 'dueBefore', app.kassa_acc_due(v_pid)),
+      'lines', v_split), 'ACT', v_uid, true) b;
+  perform app.kassa_flag(false);
+  return app.kassa_doc_json(v_doc_id) || jsonb_build_object('ok', true, 'dup', false, 'openBefore', v_open, 'openAfter', v_open - (v_total - v_over),
+                                                            'overspend', v_over);
+end $$;
+revoke all on function public.kassa_adv_report(jsonb) from public, anon;
+grant execute on function public.kassa_adv_report(jsonb) to authenticated;
+
+-- Avans hisobotini TASDIQLASH (F2.6; kassa-docs.sql: kassa_doc_approve shu yerga yo'naltiradi — tasdiqlovchi Moliya menejeri / buxgalter yoki
+--   Direktor): kirituvchi emas (kassa:self_approve), hisobdor emas (kassa:self_report); hisobdor qulfi ostida qoldiq kiritilgandagi bilan bir
+--   xil (aks holda kassa:adv_stale); tasdiq ("approvedBy") va o'tkazish (raqam — bugungi kun) bitta tranzaksiyada, so'ng har qator
+--   «Buxgalteriya»ga xarajat (ortiqcha sarf qismi izohida belgilanadi). Javob: hujjat + qoldiq oldin / keyin, ortiqcha sarf, hisobdorga qarzimiz.
+create or replace function app.kassa_adv_approve(p_id text, p_uid text) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare
+  v_doc public.cash_docs%rowtype; v_open numeric; v_a numeric; v_e numeric; v_snap jsonb; l record; v_cat text; v_lbl text;
+begin
+  select * into v_doc from public.cash_docs c where c.id = p_id;
+  if not found or v_doc.op is distinct from 'nc_adv_report' or v_doc.status <> 'draft' then
+    raise exception 'Avans hisoboti tasdiq kutmayapti' using errcode = 'P0001', hint = 'kassa:bad_status';
+  end if;
+  if v_doc."requestedBy" = p_uid then
+    raise exception 'O''zingiz kiritgan avans hisobotini o''zingiz tasdiqlay olmaysiz — uni boshqa 2-ro''yxat xodimi (buxgalter / Moliya menejeri) yoki Direktor tasdiqlaydi'
+      using errcode = '42501', hint = 'kassa:self_approve';
+  end if;
+  if v_doc."partyId" = any(app.kassa_user_cards(p_uid)) then   -- sec-1
+    raise exception 'O''zingiz hisobdor bo''lgan avans hisobotini o''zingiz tasdiqlamaysiz — uni boshqa 2-ro''yxat xodimi yoki Direktor tasdiqlaydi'
+      using errcode = '42501', hint = 'kassa:self_report';
+  end if;
+  if not app.kassa_live() then raise exception 'Kassa ishga tushirilmagan' using errcode = 'P0001', hint = 'kassa:not_live'; end if;
+  perform pg_advisory_xact_lock(hashtext('iqror_acc:' || coalesce(v_doc."partyId", '')));   -- hisobdor qulfi — kassa qulfidan (L4) oldin
+  v_snap := coalesce(v_doc."sourceSnapshot", '{}'::jsonb);
+  v_open := app.kassa_acc_open(v_doc."partyId");
+  if v_open is distinct from (v_snap ->> 'openBefore')::numeric then
+    raise exception 'Hisobot kiritilgandan keyin hisobdor qoldig''i o''zgargan (% → % so''m: avans berilgan yoki qaytim olingan) — hisobotni bekor qilib, qayta kiriting',
+      trim_scale((v_snap ->> 'openBefore')::numeric), trim_scale(v_open) using errcode = 'P0001', hint = 'kassa:adv_stale';
+  end if;
+  select coalesce(sum(x.amount) filter (where x.credit = '4230'), 0), coalesce(sum(x.amount) filter (where x.credit = '6970'), 0)
+    into v_a, v_e from public.cash_doc_lines x where x."docId" = p_id;
+  perform app.kassa_flag(true);
+  update public.cash_docs set "approvedBy" = p_uid, "approvedAt" = now() where id = p_id;
+  v_doc := app.kassa_act_post(p_id, p_uid, app.fin_today());   -- L4, L5
   for l in select * from public.cash_doc_lines x where x."docId" = v_doc.id order by x."lineNo" loop
     select k.o_category, k.o_label into v_cat, v_lbl from app.kassa_exp_category(l."articleId") k;   -- KO-2 «Xarajat» bilan bir xil qoida (acc-9)
     insert into public.expenses (id, date, month, category, amount, note, method, "cashDocId", "articleId")
       values ('ka_' || v_doc.id || '_' || l."lineNo", to_char(v_doc."businessDay", 'YYYY-MM-DD'), to_char(v_doc."businessDay", 'YYYY-MM'),
               v_cat, l.amount,
-              left(btrim(coalesce(v_lbl || ': ', '') || v_pname || case when coalesce(l.note, '') <> '' then ' — ' || l.note else '' end
-                         || ' (avans hisoboti № ' || v_doc.no || ')'), 300),
+              left(btrim(coalesce(v_lbl || ': ', '') || coalesce(v_doc."partyName", '') || case when coalesce(l.note, '') <> '' then ' — ' || l.note else '' end
+                         || case when l.credit = '6970' then ' · ortiqcha sarf' else '' end || ' (avans hisoboti № ' || v_doc.no || ')'), 300),
               'accountable', v_doc.id, l."articleId");
   end loop;
   perform app.kassa_flag(false);
-  return app.kassa_doc_json(v_doc.id) || jsonb_build_object('ok', true, 'dup', false, 'openBefore', v_open, 'openAfter', v_open - v_total);
+  return app.kassa_doc_json(v_doc.id) || jsonb_build_object('ok', true, 'dup', false, 'openBefore', v_open, 'openAfter', v_open - v_a,
+                                                            'overspend', v_e, 'due', app.kassa_acc_due(v_doc."partyId"));
 end $$;
-revoke all on function public.kassa_adv_report(jsonb) from public, anon;
-grant execute on function public.kassa_adv_report(jsonb) to authenticated;
+revoke all on function app.kassa_adv_approve(text, text) from public, anon, authenticated;
 
 -- Avans hisobotini bekor qilish: faqat kiritilgan kunning o'zida, sabab bilan (2-ro'yxat yoki Direktor). Xarajatlar olib tashlanadi,
 --   hisobdordagi qoldiq tiklanadi, dalolatnoma raqami saqlanib «bekor qilingan» bo'ladi. Keyingi kunlarda — buxgalter tuzatishi.
@@ -1404,6 +1472,11 @@ begin
   end if;
   if v_doc."businessDay" <> app.fin_today() then
     raise exception 'Avans hisoboti faqat kiritilgan kunning o''zida bekor qilinadi (keyin — buxgalter tuzatishi)' using errcode = 'P0001', hint = 'kassa:day_closed';
+  end if;
+  -- F2.6: hisobotdagi ortiqcha sarf hisobdorga allaqachon berilgan bo'lsa — bekor qilinmaydi (qarzimiz manfiy bo'lib qolardi)
+  if app.kassa_acc_due(v_party) - (select coalesce(sum(l.amount), 0) from public.cash_doc_lines l where l."docId" = p_id and l.credit = '6970') < 0 then
+    raise exception 'Bu hisobotdagi ortiqcha sarf hisobdorga berilgan («Ortiqcha sarfni qoplash» orderi) — avval o''sha orderni bekor qiling'
+      using errcode = 'P0001', hint = 'kassa:due_used';
   end if;
   perform app.kassa_flag(true);
   delete from public.expenses e where e."cashDocId" = p_id;

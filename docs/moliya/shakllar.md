@@ -44,9 +44,12 @@ qurilma navbatidagi yozuvlar va server ishlamagan paytdagi «Қ» blankalari (so
 ## Sh-1. Avans hisoboti
 
 Qog‘ozdagi hisobot (cheklar bilan) — birlamchi hujjat. Tekshirilgach u tizimga «Kassa» → «Avans hisoboti» bilan kiritiladi: har chek —
-bitta qator, xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi. Tizim chop etgan dalolatnoma (tasdiqlovchi imzolar
-bilan) shu qog‘oz hisobotga qo‘shib saqlanadi. Hisobdor shaxs buxgalter yoki moliya menejerining o‘zi bo‘lsa — hisobotni u tekshirmaydi
-va tizimga kiritmaydi: boshqa 2-ro‘yxat xodimi yoki Direktor (tizim ham rad etadi).
+bitta qator. Kiritilgan hisobotni (F2.6) kirituvchidan **boshqa** 2-ro‘yxat xodimi yoki Direktor qog‘oz bilan solishtirib tasdiqlaydi — shunda
+xarajat «Buxgalteriya»ga o‘zi ko‘chadi, hisobdordagi qoldiq kamayadi. Tizim chop etgan dalolatnoma (tasdiqlovchi imzolar, kim kiritgani va
+kim tasdiqlagani bilan) shu qog‘oz hisobotga qo‘shib saqlanadi. Hisobot qoldiqdan katta bo‘lsa — farq «ortiqcha sarf» (hisobdorga qarzimiz,
+6970) bo‘lib dalolatnomada alohida qatorda chiqadi va kassadan «Ortiqcha sarfni qoplash» chiqim orderi bilan beriladi. Hisobdor shaxs
+buxgalter yoki moliya menejerining o‘zi bo‘lsa — hisobotni u tekshirmaydi, tizimga kiritmaydi va tasdiqlamaydi: boshqa 2-ro‘yxat xodimi
+yoki Direktor (tizim ham rad etadi). Hisobdor bilan hisob-kitob holati — «Kassa» → «Hisobdorlar» (RP-07) kartochkasida (chop etiladi).
 
 «[Tashkilot nomi]» · Avans hisoboti № [___] · [sana]
 «TASDIQLAYMAN»: rahbar [___] (imzo) · summa: [___] so‘m

@@ -80,6 +80,14 @@ create or replace function zz.pay(p_uid text, p_id text) returns text language s
   select zz.as(p_uid, format('select public.kassa_doc_pay(%L)::text', p_id)) $$;
 create or replace function zz.void(p_uid text, p_id text, p_reason text) returns text language sql as $$
   select zz.as(p_uid, format('select public.kassa_doc_void(%L, %L)::text', p_id, p_reason)) $$;
+-- F2.6: avans hisoboti ikki bosqichda — kiritadi p_uid, tasdiqlaydi (o'tkazadi) boshqa 2-ro'yxat xodimi yoki Direktor (p_appr). Javob —
+--   tasdiq javobi (o'tkazilgan hujjat, qoldiq oldin / keyin) yoki kiritish xatosi (to'liq ssenariy — test-kassa-adv.sql).
+create or replace function zz.avr(p_uid text, p_appr text, p_json text) returns text language plpgsql as $$
+declare r text := zz.rpc(p_uid, 'kassa_adv_report', p_json);
+begin
+  if zz.js(r) is null or zz.js(r) ->> 'status' is distinct from 'draft' then return r; end if;
+  return zz.appr(p_appr, zz.js(r) ->> 'id');
+end $$;
 -- Qo'lda naqd o'quv to'lovi: (uid, payId, o'quvchi, summa, to'lovchi, fiskal chek №)
 create or replace function zz.tui(p_uid text, p_id text, p_sid text, p_amount numeric, p_payer text, p_fiscal text) returns text language sql as $$
   select zz.as(p_uid, format('select public.record_manual_payment(%L, %L, %s, %L, null, %L, %L, %L, null, %L::jsonb)::text',
@@ -327,14 +335,14 @@ select zz.chk('AV1 kassir va o''qituvchi avans hisobotini kirita olmaydi',
   zz.rpc('U_KAS', 'kassa_adv_report', '{"clientRef":"av-r1-0001","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 15"}]}') || ' | '
   || zz.rpc('U_TCH', 'kassa_adv_report', '{"clientRef":"av-r1-0002","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 15"}]}'),
   '^ERR 42501.* \| ERR 42501');
-select zz.chk('AV2 rad: ish haqi statiyasi, cheksiz qator, kelajak sana, qoldiqdan katta summa, avansi yo''q xodim',
+-- F2.6: qoldiqdan katta hisobot endi rad emas — ortiqcha sarf (Kt 6970) bilan tasdiqqa boradi (test-kassa-adv.sql, O-bo'lim)
+select zz.chk('AV2 rad: ish haqi statiyasi, cheksiz qator, kelajak sana, avansi yo''q xodim',
   zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r2-0001","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"EX-01","amount":100000,"note":"Chek 15"}]}') || ' | '
   || zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r2-0002","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"EX-20","amount":100000,"note":""}]}') || ' | '
   || zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r2-0003","partyId":"staff:st1","reportDate":"2027-01-12","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 15"}]}') || ' | '
-  || zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r2-0004","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"EX-20","amount":200000,"note":"Chek 15"},{"articleId":"EX-16","amount":60000,"note":"Chek 16"}]}') || ' | '
   || zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r2-0005","partyId":"teachers:tch1","reportDate":"2027-01-11","lines":[{"articleId":"EX-20","amount":1000,"note":"Chek 1"}]}'),
-  '^ERR 22023 \[kassa:article\].* \| ERR 22023 \[kassa:note\].* \| ERR 22023 \[kassa:basis\].* \| ERR P0001 \[kassa:acc_over\].* \| ERR P0001 \[kassa:acc_none\]');
-select zz.put('AV3', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r3-0001","partyId":"staff:st1","reportDate":"2027-01-10","basis":"Oziq-ovqat xaridi","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 15, 09.01"},{"articleId":"EX-16","amount":50000,"note":"Chek 16, 09.01"}]}'));
+  '^ERR 22023 \[kassa:article\].* \| ERR 22023 \[kassa:note\].* \| ERR 22023 \[kassa:basis\].* \| ERR P0001 \[kassa:acc_none\]');
+select zz.put('AV3', zz.avr('U_FM', 'U_DIR', '{"clientRef":"av-r3-0001","partyId":"staff:st1","reportDate":"2027-01-10","basis":"Oziq-ovqat xaridi","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 15, 09.01"},{"articleId":"EX-16","amount":50000,"note":"Chek 16, 09.01"}]}'));
 select zz.chk('AV3 avans hisoboti: naqdsiz dalolatnoma, Dt 1010 / 2010 Kt 4230, hisobdordagi qoldiq 250 000 → 50 000',
   (zz.js(zz.get('AV3')) ->> 'form') || ':' || (zz.js(zz.get('AV3')) ->> 'op') || ':' || (zz.js(zz.get('AV3')) ->> 'status') || ':' || trim_scale((zz.js(zz.get('AV3')) ->> 'amount')::numeric)
   || ':' || (select string_agg((l ->> 'debit') || '>' || (l ->> 'credit') || '=' || trim_scale((l ->> 'amount')::numeric) || '@' || (l ->> 'articleId'), ',' order by (l ->> 'lineNo')::int)
@@ -371,7 +379,7 @@ select zz.chk('AV8 bekor qilish: kassir — rad, sababsiz — rad; Moliya meneje
   zz.get('AV8') || ' | ' || (select count(*) from public.expenses where "cashDocId" = zz.id('AV3')) || ':'
   || (select trim_scale((a ->> 'balance')::numeric) from jsonb_array_elements(zz.checks('main') -> 'accountable') a where a ->> 'partyId' = 'staff:st1'),
   '^ERR 42501.* \| ERR 22023 \[kassa:reason\].* \| void:true \| 0:250000$');
-select zz.put('AV9', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-r9-0001","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"EX-20","amount":200000,"note":"Cheklar 15-16, 09.01"}]}'));
+select zz.put('AV9', zz.avr('U_FM', 'U_DIR', '{"clientRef":"av-r9-0001","partyId":"staff:st1","reportDate":"2027-01-11","lines":[{"articleId":"EX-20","amount":200000,"note":"Cheklar 15-16, 09.01"}]}'));
 -- qa-8: avans hisoboti faqat kiritilgan kunning o'zida bekor qilinadi — ertasi kuni rad (aks holda o'tgan, yopilgan / tekshirilgan kunning
 --   «Buxgalteriya» xarajati orqaga o'chib, hisobdor qoldig'i tiklanardi; keyin — buxgalter tuzatishi). Savepoint ichida (soat va holat qaytadi).
 savepoint av9b;
@@ -411,7 +419,7 @@ select zz.chk('AV16 ichki funksiya mijozga yopiq', zz.as('U_DIR', $q$select app.
 -- state-5: avans hisoboti yozilgan hisobdorga avans (KO-2) bekor qilinmaydi (qoldiq manfiy bo'lardi); avval hisobot bekor qilinadi.
 --   Ssenariy savepoint ichida (keyingi bo'limlar kun jamlari o'zgarmasin): AV13a — o'qituvchiga 50 000 bugun berilgan avans.
 savepoint st5;
-select zz.put('S5r', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-s5-0001","partyId":"teachers:tch1","reportDate":"2027-01-11","lines":[{"articleId":"EX-32","amount":50000,"note":"Chek 21, 11.01"}]}'));
+select zz.put('S5r', zz.avr('U_FM', 'U_DIR', '{"clientRef":"av-s5-0001","partyId":"teachers:tch1","reportDate":"2027-01-11","lines":[{"articleId":"EX-32","amount":50000,"note":"Chek 21, 11.01"}]}'));
 select (zz.js(zz.get('S5r')) ->> 'status') || ':' || trim_scale(app.kassa_acc_open('teachers:tch1')) as s5_a,
        zz.void('U_KAS', zz.id('AV13a'), 'Xato berilgan avans') as s5_b, zz.void('U_FM', zz.id('AV13a'), 'Xato berilgan avans') as s5_c \gset
 select (zz.js(zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.id('S5r'), 'Xato kiritilgan hisobot'))) ->> 'status') || ':'
@@ -439,7 +447,7 @@ select zz.chk('AV18 manfiy qoldiq ko''rinadi (berilgan 50 000 − qaytim 70 000 
 --   yetkazib beruvchi bilan hisob-kitob (OP-17) — yo'q. Shakldagi ro'yxat (kassa_refs: advReport) server qoidasining o'zi. acc-9: «Buxgalteriya»ga
 --   ko'chishda asosiy vosita — «Inventar», tovar — «Boshqa», izoh statiya nomi bilan boshlanadi. Savepoint ichida (keyingi bo'limlar qoldig'i o'zgarmasin).
 savepoint ao5;
-select zz.put('AO5', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-a5-0001","partyId":"staff:st1","reportDate":"2027-01-11","basis":"Noutbuk va forma","lines":[{"articleId":"OP-18","amount":70000,"note":"Chek 31, noutbuk"},{"articleId":"OP-24","amount":30000,"note":"Chek 32, forma"}]}'));
+select zz.put('AO5', zz.avr('U_FM', 'U_DIR', '{"clientRef":"av-a5-0001","partyId":"staff:st1","reportDate":"2027-01-11","basis":"Noutbuk va forma","lines":[{"articleId":"OP-18","amount":70000,"note":"Chek 31, noutbuk"},{"articleId":"OP-24","amount":30000,"note":"Chek 32, forma"}]}'));
 select (zz.js(zz.get('AO5')) ->> 'status') || ':' || trim_scale((zz.js(zz.get('AO5')) ->> 'amount')::numeric) || ':'
        || (select string_agg((l ->> 'debit') || '>' || (l ->> 'credit') || '=' || trim_scale((l ->> 'amount')::numeric) || '@' || (l ->> 'articleId'), ',' order by (l ->> 'lineNo')::int)
              from jsonb_array_elements(zz.js(zz.get('AO5')) -> 'lines') l)
@@ -840,11 +848,11 @@ select zz.chk('SD1 sec-1: o''zi hisobdor bo''lgan avans hisobotini Moliya meneje
   zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"av-sd1-0001","partyId":"staff:st1","reportDate":"2027-01-14","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 41, 14.01"}]}')
   || ' | ' || trim_scale(app.kassa_acc_open('staff:st1')) || ':' || (select count(*) from public.cash_docs where "clientRef" = 'avh_av-sd1-0001'),
   '^ERR 42501 \[kassa:self_report\] O''zingiz hisobdor bo''lgan avans hisobotini o''zingiz kiritmaysiz.* \| 150000:0$');
-select zz.put('SD2', zz.rpc('U_ACC', 'kassa_adv_report', '{"clientRef":"av-sd2-0001","partyId":"staff:st1","reportDate":"2027-01-14","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 41, 14.01"}]}'));
+select zz.put('SD2', zz.avr('U_ACC', 'U_DIR', '{"clientRef":"av-sd2-0001","partyId":"staff:st1","reportDate":"2027-01-14","lines":[{"articleId":"EX-20","amount":100000,"note":"Chek 41, 14.01"}]}'));
 select zz.put('SD2o', trim_scale(app.kassa_acc_open('staff:st1')) || ':' || (select count(*) from public.expenses where "cashDocId" = zz.f(zz.get('SD2'), 'id')));
 select zz.put('SD2f', zz.as('U_FM', format('select public.kassa_adv_report_void(%L, %L)::text', zz.f(zz.get('SD2'), 'id'), 'Xato kiritilgan hisobot')));
 select zz.put('SD2v', zz.as('U_ACC', format('select public.kassa_adv_report_void(%L, %L)::text', zz.f(zz.get('SD2'), 'id'), 'Xato kiritilgan hisobot')));
-select zz.chk('SD2 boshqa 2-ro''yxat xodimi (buxgalter) kiritadi — qoldiq kamaydi, xarajat «Buxgalteriya»da; hisobdorning o''zi bekor qila olmaydi, buxgalter bekor qiladi',
+select zz.chk('SD2 boshqa 2-ro''yxat xodimi (buxgalter) kiritadi, Direktor tasdiqlaydi — qoldiq kamaydi, xarajat «Buxgalteriya»da; hisobdorning o''zi bekor qila olmaydi, buxgalter bekor qiladi',
   zz.f(zz.get('SD2'), 'status') || ':' || zz.get('SD2o') || ' | ' || zz.get('SD2f') || ' | ' || zz.f(zz.get('SD2v'), 'status')
   || ':' || trim_scale(app.kassa_acc_open('staff:st1')) || ':' || (select count(*) from public.expenses where "cashDocId" = zz.f(zz.get('SD2'), 'id')),
   '^posted:50000:1 \| ERR 42501 \[kassa:self_report\] O''zingiz hisobdor bo''lgan avans hisobotini o''zingiz bekor qilmaysiz.* \| void:150000:0$');

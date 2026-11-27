@@ -82,7 +82,7 @@ create or replace function zz.doc(p_desk text, p_form text, p_no int) returns te
 set local session_replication_role = replica;
 insert into public.users (id, email, name, role, status, "extraRoles") values
   ('U_DIR','d@x','Sinov Direktor','director','active','[]'), ('U_FM','f@x','Sinov Moliyachi','finance_mgr','active','[]'),
-  ('U_KAS','k@x','Sinov Kassir','kassir','active','[]')
+  ('U_KAS','k@x','Sinov Kassir','kassir','active','[]'), ('U_ACC','a@x','Sinov Buxgalter','accountant','active','[]')
 on conflict (id) do update set role = excluded.role, status = excluded.status, email = excluded.email, name = excluded.name;
 insert into public.students (id, "studentId", name, grade, "classLetter", lang, "payStatus", "order", pauses) values
   ('s1','T-1','Sinov A',5,'A','uz','',1,'[]'), ('s2','T-2','Sinov B',5,'A','uz','',2,'[]'), ('s3','T-3','Sinov C',5,'A','uz','',3,'[]');
@@ -102,7 +102,7 @@ select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- (A) toza holat: bo'sh modul ----------
 \ir kassa-checks.sql
-select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz (reliz 15; himoya mantig''i izi — toza zanjirniki bilan bir xil)', :'bad' || '/' || :'err' || '/' || :'ver' || '/' || :'c23' || '/' || :'c24', '^0/0/23/0/0$');
+select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz (reliz 15; himoya mantig''i izi — toza zanjirniki bilan bir xil)', :'bad' || '/' || :'err' || '/' || :'ver' || '/' || :'c23' || '/' || :'c24', '^0/0/24/0/0$');
 
 -- ---------- 1-kun (04.01.2027): ishga tushirish va hujjatlar ----------
 select zz.chk('A1 ishga tushirish: sozlamalar va boshlang''ich qoldiq 2 000 000',
@@ -142,6 +142,7 @@ select zz.put('K5', zz.rpc('U_KAS', 'kassa_receipt', '{"op":"in_other","amount":
 select zz.put('C4', zz.rpc('U_KAS', 'kassa_payout_request', '{"op":"out_accountable","amount":200000,"partyType":"employee","partyId":"teachers:tch1","basis":"Xo''jalik xaridlari","clientRef":"c-c4-0001"}'));
 select zz.put('C4p', left(zz.appr('U_FM', zz.id('C4')), 0) || zz.pay('U_KAS', zz.id('C4')));   -- hisobdorga avans
 select zz.put('AV1', zz.rpc('U_FM', 'kassa_adv_report', '{"clientRef":"c-av1-0001","partyId":"teachers:tch1","reportDate":"2027-01-06","lines":[{"articleId":"EX-20","amount":150000,"note":"Chek 7, 06.01"}]}'));   -- avans hisoboti (dalolatnoma)
+select zz.put('AV1p', zz.appr('U_ACC', zz.id('AV1')));   -- F2.6: ikkinchi bosqich (boshqa 2-ro'yxat xodimi) — tasdiq bilan o'tkaziladi
 -- o'zaro hisob o'quvchining eski avansi bilan (acc-2): dalolatnomada naqdsiz Dt 6310 Kt 4010 ma'lumot qatori — tekshiruv uni summaga qo'shmasligi kerak
 select zz.put('O2', zz.rpc('U_DIR', 'kassa_offset', jsonb_build_object('id', 'sp_ofs_c2', 'teacherId', 'IQT-T1', 'payeeRef', 'teachers:tch1', 'teacherName', 'Sinov',
   'month', '2026-12', 'paid', 100000, 'gross', 3000000, 'advance', 0, 'deduction', 0, 'subBonus', 0, 'net', 3000000, 'carryIn', 0, 'carryOut', 0,

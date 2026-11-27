@@ -105,7 +105,8 @@ const allErrs = [];
     await a.pg.click('#m-cancel').catch(() => {});
     await a.pg.screenshot({ path: `${OUT}/acc-${UI}-1440.png` });
   }
-  // ---------------- 2b) Buxgalter: avans hisoboti — «Kassa» → «Avans hisoboti» (hisobdor sarflagan pul, naqdsiz dalolatnoma)
+  // ---------------- 2b) Buxgalter: avans hisoboti — «Kassa» → «Avans hisoboti» (hisobdor sarflagan pul, naqdsiz dalolatnoma). F2.6: ikki bosqich —
+  //   buxgalter kiritadi (tasdiq kutadi), Moliya menejeri (boshqa 2-ro'yxat xodimi) tasdiqlaydi — o'tkaziladi; buxgalter bekor qiladi
   {
     await a.kassaReady();
     ok('«Avans hisoboti» tugmasi buxgalterda bor', !!(await a.pg.$('#ks-adv')));
@@ -116,11 +117,21 @@ const allErrs = [];
     await a.pg.selectOption('[data-aart="0"]', 'EX-16');
     await a.pg.fill('[data-aamt="0"]', '150000'); await a.pg.fill('[data-anote="0"]', 'Chek 7, bugun');
     const sumTxt = await a.pg.$eval('#av-sum', e => e.textContent);
-    ok('jami va qolgan qoldiq hisoblanadi (150 000 → 50 000)', /150\s000/.test(sumTxt) && /50\s000/.test(sumTxt), sumTxt);
+    ok('jami va qolgan qoldiq hisoblanadi (150 000 → 50 000), ortiqcha sarf yo‘q', /150\s000/.test(sumTxt) && /50\s000/.test(sumTxt) && !(await a.pg.$('#av-over')), sumTxt);
     await a.pg.click('#av-save'); await a.modalGone().catch(() => {}); await a.pg.waitForTimeout(1000);
     const adoc = q(`select id from public.cash_docs where op = 'nc_adv_report' order by "createdAt" desc limit 1`);
-    const row = q(`select c.status || ':' || c.amount::bigint || ':' || (select count(*) from public.expenses e where e."cashDocId" = c.id and e.method = 'accountable') || ':' || trim_scale(app.kassa_acc_open('teachers:${ids.T1}')) from public.cash_docs c where c.id = '${adoc}'`);
-    ok('avans hisoboti o‘tkazildi: 150 000, «Buxgalteriya»da 1 ta xarajat, hisobdorda 50 000 qoldi', row === 'posted:150000:1:50000', row);
+    const row0 = q(`select c.status || ':' || c.amount::bigint || ':' || coalesce(c.no::text, '-') || ':' || (select count(*) from public.expenses e where e."cashDocId" = c.id) || ':' || trim_scale(app.kassa_acc_open('teachers:${ids.T1}')) from public.cash_docs c where c.id = '${adoc}'`);
+    ok('F2.6: avans hisoboti kiritildi — tasdiq kutadi (raqamsiz), xarajat hali yo‘q, hisobdorda 200 000', row0 === 'draft:150000:-:0:200000' && /tasdiq kutmoqda/.test(await a.toasts()), [row0, await a.toasts()]);
+    await a.kassaReady();
+    ok('F2.6: so‘rovlar jadvalida hisobot ko‘rinadi, kirituvchida (buxgalter) «Tasdiqlash» tugmasi yo‘q', !!(await a.pg.$(`[data-advreq="${adoc}"]`)) && !(await a.pg.$(`[data-appr="${adoc}"]`)));
+    const mm = await login(ids.R_MOL); await mm.kassaReady();
+    const ab = await mm.pg.waitForSelector(`[data-appr="${adoc}"]`, { timeout: 15000 }).catch(() => null);
+    ok('F2.6: Moliya menejeri (boshqa 2-ro‘yxat xodimi) — «Tasdiqlash» tugmasi bor, «Pulni berish» yo‘q', !!ab && !(await mm.pg.$(`[data-pay="${adoc}"]`)));
+    if (ab) { await ab.click(); await mm.pg.waitForFunction(id => !document.querySelector(`[data-appr="${id}"]`), adoc, { timeout: 15000 }).catch(() => {}); await mm.pg.waitForTimeout(800); }
+    const row = q(`select c.status || ':' || c.amount::bigint || ':' || (select count(*) from public.expenses e where e."cashDocId" = c.id and e.method = 'accountable') || ':' || trim_scale(app.kassa_acc_open('teachers:${ids.T1}')) || ':' || (c."approvedBy" = '${ids.R_MOL}') from public.cash_docs c where c.id = '${adoc}'`);
+    ok('tasdiq bilan o‘tkazildi: 150 000, «Buxgalteriya»da 1 ta xarajat, hisobdorda 50 000 qoldi; tasdiqlovchi — Moliya menejeri; tasdiq oynasida izoh', row === 'posted:150000:1:50000:true'
+      && mm.dialogs.some(d => /Avans hisoboti tasdiqlansinmi/.test(d) && /«Buxgalteriya»ga ko‘chadi/.test(d)), [row, mm.dialogs]);
+    await mm.ctx.close();
     await a.kassaReady();
     ok('dalolatnomalar ro‘yxatida avans hisoboti va «Bekor» tugmasi bor', !!(await a.pg.$(`[data-advvoid="${adoc}"]`)) && /Avans hisoboti/.test(await a.pg.$eval('#ks-acts', e => e.innerText).catch(() => '')));
     await a.pg.waitForSelector('#ks-ctl-card', { timeout: 15000 }).catch(() => {});

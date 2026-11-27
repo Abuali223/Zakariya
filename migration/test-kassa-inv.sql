@@ -171,7 +171,7 @@ select zz.put('C3', zz.mc('U_DIR', 'main', null));
 select zz.chk('C3 standart — o''tgan oy (2027-01), oy tugagan; bandlar tartibi',
   (zz.js(zz.get('C3')) ->> 'month') || '/' || (zz.js(zz.get('C3')) ->> 'ended') || '/' ||
   (select string_agg(i ->> 'code', ',' order by o) from jsonb_array_elements(zz.js(zz.get('C3')) -> 'items') with ordinality t(i, o)),
-  '^2027-01/true/days_open,days_pending,unverified,inv,shortages,fixes,z,advances,limit,unmatched,refunds,payroll,snapshot,lock$');
+  '^2027-01/true/days_open,days_pending,unverified,inv,shortages,fixes,z,advances,advPending,limit,unmatched,refunds,payroll,snapshot,lock$');
 select zz.chk('C4 ochiq kun (29-yanvar): block, ready yo''q, canLock yo''q; INV — oxirgi yopilgan kun (28) bo''yicha joyida',
   zz.lv(zz.get('C3'), 'days_open') || '/' || (zz.item(zz.get('C3'), 'days_open') -> 'days' ->> 0) || '/' || (zz.js(zz.get('C3')) ->> 'blockers') || '/' ||
   (zz.js(zz.get('C3')) ->> 'ready') || '/' || (zz.js(zz.get('C3')) ->> 'canLock') || '/' || zz.lv(zz.get('C3'), 'inv') || '/' || (zz.item(zz.get('C3'), 'inv') ->> 'lastDay'),
@@ -234,7 +234,7 @@ select zz.chk('C12 sinov kassasi: pul jadvallari bandlarisiz, block yo''q, canLo
   (zz.js(zz.mc('U_DIR', 'sinov', '2027-01')) ->> 'isTest') || '/' ||
   (select string_agg(i ->> 'code', ',' order by o) from jsonb_array_elements(zz.js(zz.mc('U_DIR', 'sinov', '2027-01')) -> 'items') with ordinality t(i, o)) || '/' ||
   (zz.js(zz.mc('U_DIR', 'sinov', '2027-01')) ->> 'canLock'),
-  '^true/days_open,days_pending,unverified,inv,shortages,fixes,advances,limit,refunds/false$');
+  '^true/days_open,days_pending,unverified,inv,shortages,fixes,advances,advPending,limit,refunds/false$');
 select zz.chk('C13 joriy oy (tugamagan): ended yo''q, canLock yo''q, INV — info',
   (zz.js(zz.mc('U_DIR', 'main', '2027-02')) ->> 'ended') || '/' || (zz.js(zz.mc('U_DIR', 'main', '2027-02')) ->> 'canLock') || '/' || zz.lv(zz.mc('U_DIR', 'main', '2027-02'), 'inv'),
   '^false/false/info/0$');

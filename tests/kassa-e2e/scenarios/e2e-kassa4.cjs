@@ -79,8 +79,8 @@ const allErrs = [];
     const [preN, preS] = q(`select count(*) || ':' || coalesce(sum(amount), 0)::bigint from public.expenses e where e.date between to_char(date '${today}' - 400, 'YYYY-MM-DD') and to_char(date '${today}' - 1, 'YYYY-MM-DD')
       and coalesce(e.method, '') in ('', 'cash') and e."cashDocId" is null and coalesce(e.id, '') not like 'payroll\\_\\_%' and e."createdAt" >= ('${today}'::timestamp at time zone 'Asia/Tashkent')`).split(':');
     const notOk = Object.entries(c).filter(x => x[1].level !== 'ok').map(([k, x]) => k + ':' + x.level).sort().join(',');
-    ok('direktor: nazorat ro‘yxati ko‘rinadi — 33 tekshiruv (F2.13: «QT so‘rovlari»; Sh-8 B15: «Bankka topshirish» — bugungi kun jadvalda, o‘tkazib yuborilgani yo‘q; F2.8: «Oylik komissiya inventarizatsiyasi» — kamchilik yo‘q); joyida bo‘lmagani faqat: bog‘lanmagan MM hisobi (diqqat) va ishga tushishdan oldingi sanali xarajatlar (ma’lumot)',
-      Object.keys(c).length === 33 && c.fixPending && c.fixPending.level === 'ok' && c.deposit && c.deposit.level === 'ok' && c.deposit.text.includes(`har ${DOW} — o‘z vaqtida`)
+    ok('direktor: nazorat ro‘yxati ko‘rinadi — 34 tekshiruv (F2.13: «QT so‘rovlari»; Sh-8 B15: «Bankka topshirish» — bugungi kun jadvalda, o‘tkazib yuborilgani yo‘q; F2.8: «Oylik komissiya inventarizatsiyasi» — kamchilik yo‘q; F2.6: «Hisobdorlarga qarzimiz» — yo‘q); joyida bo‘lmagani faqat: bog‘lanmagan MM hisobi (diqqat) va ishga tushishdan oldingi sanali xarajatlar (ma’lumot)',
+      Object.keys(c).length === 34 && c.fixPending && c.fixPending.level === 'ok' && c.accDue && c.accDue.level === 'ok' && c.accDue.text.endsWith('yo‘q') && c.deposit && c.deposit.level === 'ok' && c.deposit.text.includes(`har ${DOW} — o‘z vaqtida`)
       && c.inv && c.inv.level === 'ok' && c.inv.text.includes('kamchilik yo‘q')
       && notOk === 'preLive:info,unlinked:warn' && c.unlinked.text.endsWith(`diqqat ${mmName} (moliya menejeri)`)
       && Number(preN) > 0 && c.preLive.text.endsWith(`ma’lumot xarajat: ${preN} ta · ${fmt(preS)} so‘m`) && c.preLive.text.includes(`ishga tushgan kundan (${dm}) oldin`)

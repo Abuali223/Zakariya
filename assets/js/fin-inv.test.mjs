@@ -108,7 +108,8 @@ test('monthCheckRows / monthCheckSummary: matn va daraja', () => {
     { code: 'unverified', level: 'warn', n: 2, days: ['2027-01-28', '2027-01-29'] },
     { code: 'inv', level: 'warn', n: 1, lastDay: '2027-01-29', kind: 'close', invDays: ['2027-01-28'] },
     { code: 'shortages', level: 'warn', n: 1, sum: 1000 }, { code: 'fixes', level: 'ok', n: 0 }, { code: 'z', level: 'ok', n: 0, days: [] },
-    { code: 'advances', level: 'warn', n: 2, sum: 350000, asOf: '2027-01-31' }, { code: 'limit', level: 'ok', n: 0, days: [], cashLimit: null },
+    { code: 'advances', level: 'warn', n: 2, sum: 350000, asOf: '2027-01-31' }, { code: 'advPending', level: 'warn', n: 1, sum: 70000 },
+    { code: 'limit', level: 'ok', n: 0, days: [], cashLimit: null },
     { code: 'unmatched', level: 'warn', n: 1, sum: 50000 }, { code: 'refunds', level: 'ok', n: 0, sum: 0 },
     { code: 'payroll', level: 'info', run: 'approved', n: 1, sum: 600000 }, { code: 'snapshot', level: 'info', n: 0, snapshot: null },
     { code: 'lock', level: 'info', n: 0, lockedThrough: '2026-12-31' }];
@@ -120,6 +121,7 @@ test('monthCheckRows / monthCheckSummary: matn va daraja', () => {
   assert.equal(r.inv.value, 'oxirgi kun (29.01.2027) oddiy yopilgan; inventarizatsiya: 28.01.2027'); assert.equal(r.inv.level, 'warn'); assert.ok(r.inv.hint.includes('qayta ochadi'));
   assert.ok(r.shortages.value.startsWith('1 ta · 1 000')); assert.equal(r.z.value, 'mos'); assert.ok(r.advances.value.startsWith('2 kishi · 350 000') && r.advances.value.endsWith('(31.01.2027 holatiga)'));
   assert.equal(r.limit.value, 'limit belgilanmagan'); assert.ok(r.unmatched.value.startsWith('1 ta · 50 000'));
+  assert.ok(r.advPending.value.startsWith('1 ta · 70 000') && r.advPending.level === 'warn' && r.advPending.label === 'Tasdiq kutayotgan avans hisobotlari' && r.advPending.hint.includes('oy yopilishidan oldin'), JSON.stringify(r.advPending));
   assert.ok(r.payroll.value.startsWith('vedomost — tasdiqlangan; to‘lanmagan: 1 kishi · 600 000')); assert.equal(r.payroll.level, 'info');
   assert.equal(r.snapshot.value, 'olinmagan'); assert.equal(r.lock.value, '31.12.2026 gacha yopilgan — bu oy hali ochiq');
   assert.ok(monthCheckSummary(mc).startsWith('Davrni yopib bo‘lmaydi: 1 ta to‘siq — Davrni yopib bo‘lmaydi: 29.01.2027'));
