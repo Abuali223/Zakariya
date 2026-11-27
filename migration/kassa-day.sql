@@ -1752,6 +1752,47 @@ end $$;
 revoke all on function public.kassa_day_book(text, date) from public, anon;
 grant execute on function public.kassa_day_book(text, date) to authenticated;
 
+-- ---------- Kassa kitobi: yil muqovasi va varaqlar guvohnomasi (F2.12, reliz 21) ----------
+--   Kassa kitobi varaqlari raqamlanadi, ip o'tkaziladi va muhr bilan mahkamlanadi; varaqlar soni rahbar va bosh buxgalter imzosi bilan
+--   tasdiqlanadi (guvohnoma). Elektron kitobda varaq — kun yopilganda chop etiladigan KO-4 varaqlari (kassa_day_close: "sheetFrom" /
+--   "sheetTo", yil ichida uzluksiz; 1-nusxa kitobda qoladi). Yil oxirida 1-nusxalar muqova bilan tikiladi — shu funksiya muqova va
+--   guvohnoma uchun ma'lumot beradi. To'liq emas belgilari (ekranda va bosmada): yil tugamagan, ochiq (yopilmagan) kun, raqamlar
+--   uzluksiz emas (kassa-checks 15-band bilan bir qoida).
+create or replace function public.kassa_book_cover(p_desk text, p_year int) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_k public.cash_desks%rowtype; v_today date := app.fin_today();
+  v jsonb;
+begin
+  if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  if p_year is null or p_year < 2000 or p_year > extract(year from v_today)::int then
+    raise exception 'Yil noto''g''ri: %', coalesce(p_year::text, '—') using errcode = '22023', hint = 'kassa:bad_input';
+  end if;
+  select * into v_k from public.cash_desks k where k.id = v_desk;
+  if not found then raise exception 'Kassa topilmadi: %', v_desk using errcode = '22023', hint = 'kassa:bad_input'; end if;
+  with d as (select x.* from public.cash_days x where x.desk = v_desk and x.day >= make_date(p_year, 1, 1) and x.day < make_date(p_year + 1, 1, 1)),
+       c as (select d.*, lag(d."sheetTo") over (order by d.day) as prev_to from d where d.status <> 'open'),
+       g as (select c.day from c where c."sheetFrom" is distinct from coalesce(c.prev_to, 0) + 1
+                                    or (c."sheetTo" - c."sheetFrom" + 1) is distinct from greatest(1, ceil(c."docCount"::numeric / nullif(c."sheetRows", 0))::int)),
+       n as (select x.series, min(x.no) as f, max(x.no) as l, count(*) as cnt from public.cash_docs x
+              where x.desk = v_desk and x.year = p_year and x.no is not null and x.series in ('KO1', 'KO2') group by x.series)
+  select jsonb_build_object('ok', true, 'desk', v_desk, 'deskName', v_k.name, 'isTest', coalesce(v_k."isTest", false), 'year', p_year,
+           'yearEnded', p_year < extract(year from v_today)::int,
+           'firstDay', (select min(d.day) from d), 'lastDay', (select max(d.day) from d),
+           'days', (select count(*) from d), 'closedDays', (select count(*) from c),
+           'openDays', coalesce((select jsonb_agg(d.day order by d.day) from d where d.status = 'open'), '[]'::jsonb),
+           'sheetFrom', (select min(c."sheetFrom") from c), 'sheetTo', (select max(c."sheetTo") from c),
+           'sheets', (select coalesce(sum(c."sheetTo" - c."sheetFrom" + 1), 0) from c),   -- tikiladigan varaqlar (har kun — o'z varaqlari)
+           'gaps', coalesce((select jsonb_agg(g.day order by g.day) from g), '[]'::jsonb),
+           'ko1', (select jsonb_build_object('first', n.f, 'last', n.l, 'count', n.cnt) from n where n.series = 'KO1'),
+           'ko2', (select jsonb_build_object('first', n.f, 'last', n.l, 'count', n.cnt) from n where n.series = 'KO2'))
+    into v;
+  return v || jsonb_build_object('complete', (v ->> 'yearEnded')::boolean and jsonb_array_length(v -> 'openDays') = 0
+                                             and jsonb_array_length(v -> 'gaps') = 0 and (v ->> 'closedDays')::int > 0);
+end $$;
+revoke all on function public.kassa_book_cover(text, int) from public, anon;
+grant execute on function public.kassa_book_cover(text, int) to authenticated;
+
 -- Davr boshidagi va oxiridagi kassa qoldig'i — KO-3 va RP-08 uchun bitta qoida: boshi — davrdagi birinchi kassa kunining boshi;
 --   kun bo'lmasa — oldingi oxirgi kun oxiri; u ham bo'lmasa — boshlang'ich qoldiq (birinchi kassa kuni davr oxirigacha bo'lsa).
 --   Oxiri — davrdagi (yoki undan oldingi) oxirgi kun oxiri (ochiq kunda — joriy qoldiq).

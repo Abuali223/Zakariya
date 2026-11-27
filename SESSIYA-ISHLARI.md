@@ -3640,6 +3640,39 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   qaytarish» → usul). Naqdsiz qaytarishda pulni bank orqali o'tkazish — alohida (tizim faqat hisobni yuritadi); bank ko'chirmasi
   buxgalterga. Kassa moduli hali `--dev` — jonli zanjirga o'tkazish bilan chiqadi.
 
+## 97) F2.12 — patta QR va tekshirish sahifasi, kassa kitobi yil muqovasi va varaqlar guvohnomasi (reliz 21) — 2026-11-27
+
+- **Egasi (2026-11-27):** «Qolgan bandlarni boshla» — navbatdagi band F2.12 (KO-3 A4 — F1.22 da bajarilgan; qolgani yil muqovasi va
+  guvohnoma, patta QR).
+- **Patta QR qarorlari:** to'lovchi pul maktab kassa hisobiga kirganini o'zi tekshirsin. Kalit — alohida jadval `cash_doc_verify`
+  (kassa.sql; 32 ta 0-9/a-f, gen_random_uuid dan — 122 bit tasodif, taxmin qilib topilmaydi): kirim orderi raqam olganda (o'tkazilganda)
+  trigger `trg_kassa_vtok` yaratadi; dalolatnoma va chiqim orderida yo'q; Direktor ruxsatini kutgan kirimda — faqat o'tkazilgach;
+  reliz 21 dan oldingi kirim orderlariga zanjirda bir marta (qayta ishga tushganda o'zgarmaydi); bekor qilingan orderning kaliti qoladi.
+  Alohida jadval, chunki `cash_docs` o'zgarmas va kun izi (`kassa_day_hash`) unga bog'liq emas. O'qish — kassa jadvallari kabi (RLS:
+  kassa o'quvchilari); kalit hujjat ma'lumotida (`kassa_doc_json.vtok`) patta bosmasi uchun. Tekshirish — `public.verify_patta`
+  (mehmon ham): faqat holat (o'tkazilgan / bekor qilingan va sanasi), raqam, yil, sana, summa, tashkilot nomi, sinov kassasi belgisi;
+  to'lovchi, o'quvchi, asos, kassir, fiskal chek — yo'q. Nomi `verify_doc` kabi — `kassa_*` doirasidan tashqarida: moliya
+  funksiyalarining «mehmonga yopiq, avval ruxsat yo'q» qoidasi (kassa-checks 6-band, test-kassa H9) qat'iyligicha qoladi (birinchi
+  regressiya aynan shu nom tufayli qizil bo'lgan — qayta nomlandi).
+- **Sahifa:** patta bosmasida QR (sahifa `vendor/qr` kutubxonasi bilan yasaydi; `fin-print` faqat `data:image` rasmni qabul qiladi) va
+  «Тўловни текшириш: QR кодни телефонда сканерланг» (3 tilda); `verify.html?k=` — haqiqiy / bekor qilingan / topilmadi / noto'g'ri kod,
+  o'zbekcha va ruscha, telefon ekraniga mos. Patta QR bilan A4 yarmiga sig'adi (pastki chet ≈ 129 mm, kesish chizig'i 148,5 mm).
+- **Kassa kitobi:** `kassa_book_cover(kassa, yil)` (kassa-day.sql; kassa o'quvchilari): kunlar, yopilgan va ochiq kunlar, KO-4 varaqlari
+  (birinchi / oxirgi raqam, tikiladigan varaqlar soni), uzilishlar (kassa-checks 15-band qoidasi: raqam uzilishi yoki varaqlar soni
+  hujjatlar soniga mos emas), KO-1 / KO-2 oralig'i, to'liq belgisi (yil tugagan, ochiq kun va uzilish yo'q, yopilgan kun bor). «Kassa» →
+  «Kitob» oynasi (yil tanlovi; yanvar–fevralda — o'tgan yil), bosma `coverHtml`: muqova (yil, kassa, sanalar, varaqlar, orderlar) va
+  guvohnoma («Ушбу касса китобида N (so'z bilan) варақ рақамланган, ип ўтказилган ва муҳр билан маҳкамланган», rahbar va bosh buxgalter,
+  sana, muhr; ruschada son bilan kelishgan «лист / листа / листов»); to'liq bo'lmasa — «ҚОРАЛАМА» va sabablar.
+- **Reliz 21:** `fin-version.sql`, `SERVER_VER`, `kassa-checks.sql` (moliya jadvallari 21, ochiq funksiyalar 58, ichki 128, himoya
+  triggerlari 35, o'qish siyosatlari 20, 8-band — `trg_kassa_vtok`, 9-band — kalit noyobligi, barmoq izlari 383), `test-kassa-checks`
+  (A0); buxgalter yopiq ro'yxatlari (`test-fin-rights` L2 — `cash_doc_verify`, L4 / L4b — `kassa_book_cover`), «Sotuvchi» sinovi urug'i.
+- **Sinovlar:** yangi `test-kassa-book.sql` (26: kalit, tekshirish, muqova; mutatsiya 14/14 — ikki tekshiruv aynan mutatsiya ushlamagan
+  holatlar uchun qo'shildi); `fin-print.test.mjs` +3, `fin-kassa.test.mjs` +2; brauzer — yangi `k23` (10).
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 69/69, jonli zanjir va qayta zanjir, tugun va server sinovlari) — birinchi o'tishda qizil: `test-kassa` H9 va `kassa-checks` 6-band (mehmonga ochiq `kassa_*` nomi — qayta nomlandi), buxgalter yopiq ro'yxatlari va «Sotuvchi» urug'i (yangi jadval / RPC); tuzatilgach ikkinchi to'liq o'tish — hammasi yashil; brauzer to'plami — 30 o'tish, 749 tekshiruv (kassa 607) — hammasi o'tdi.
+- **Egasi va buxgalter uchun:** to'lovchi pattadagi QR ni telefonda skanerlab to'lov kassaga kirganini ko'radi (ism ko'rinmaydi).
+  Yil oxirida «Kassa» → «Kitob»: oyna «to'liq» deganda muqova va guvohnomani chop etib, KO-4 varaqlarining 1-nusxalarini tiking,
+  ip o'tkazing, muhrlang; guvohnomani rahbar va bosh buxgalter imzolaydi. Kassa moduli hali `--dev` — jonli zanjirga o'tkazish bilan chiqadi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

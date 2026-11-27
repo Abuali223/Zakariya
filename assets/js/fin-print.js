@@ -16,10 +16,18 @@
 //   sanash farqi) chop etish tilida qayta tuziladi. Pul: «1 234 567=89», nol «–», tegishli emas «X».
 // =====================================================================
 
+// Ruscha son bilan kelishish (1 лист, 2 листа, 5 листов)
+const ruPl = (n, one, few, many) => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many; };
 const T = {
   'uz-cyrl': {
     html: 'uz', stir: 'СТИР', no: '№',
     ko1: 'КИРИМ КАССА ОРДЕРИ', ko2: 'ЧИҚИМ КАССА ОРДЕРИ', patta: 'ПАТТА', pattaSub: 'кирим касса ордерига',
+    qrHint: 'Тўловни текшириш: QR кодни телефонда сканерланг',
+    cv: { title: 'КАССА КИТОБИ', sub: 'КО-4 шаклидаги варақлар (1-нусха)', year: y => `${y} йил`, desk: 'Касса', from: 'Бошланди', to: 'Тугади',
+      sheets: 'Варақлар', range: (a, b, n) => `№ ${a} — № ${b} (${n} та)`, ko1: 'Кирим касса ордерлари', ko2: 'Чиқим касса ордерлари', none: 'йўқ',
+      cert: 'ГУВОҲНОМА', certText: (n, w) => `Ушбу касса китобида ${n} (${w}) варақ рақамланган, ип ўтказилган ва муҳр билан маҳкамланган.`,
+      warn: 'КИТОБ ТЎЛИҚ ЭМАС', notEnded: 'йил ҳали тугамаган', open: d => `ёпилмаган кунлар: ${d}`, gaps: d => `варақ рақамлари узлуксиз эмас: ${d}`,
+      noDays: 'бу йилда ёпилган касса куни йўқ' },
     debit: 'Дебет', credit: 'Кредит', corr: 'корреспонденцияловчи ҳисобварақ, субсчёт', an: 'аналитик ҳисоб коди',
     sum: 'Сумма, сўм', target: 'Мақсадли йўналиш белгиси',
     from: 'Олинди', to: 'Берилсин', basis: 'Асоси', attach: 'Иловаси', amount: 'Сумма', words: 'сўз билан',
@@ -74,6 +82,12 @@ const T = {
   'uz-latn': {
     html: 'uz', stir: 'STIR', no: '№',
     ko1: 'KIRIM KASSA ORDERI', ko2: 'CHIQIM KASSA ORDERI', patta: 'PATTA', pattaSub: 'kirim kassa orderiga',
+    qrHint: 'To‘lovni tekshirish: QR kodni telefonda skanerlang',
+    cv: { title: 'KASSA KITOBI', sub: 'KO-4 shaklidagi varaqlar (1-nusxa)', year: y => `${y} yil`, desk: 'Kassa', from: 'Boshlandi', to: 'Tugadi',
+      sheets: 'Varaqlar', range: (a, b, n) => `№ ${a} — № ${b} (${n} ta)`, ko1: 'Kirim kassa orderlari', ko2: 'Chiqim kassa orderlari', none: 'yo‘q',
+      cert: 'GUVOHNOMA', certText: (n, w) => `Ushbu kassa kitobida ${n} (${w}) varaq raqamlangan, ip o‘tkazilgan va muhr bilan mahkamlangan.`,
+      warn: 'KITOB TO‘LIQ EMAS', notEnded: 'yil hali tugamagan', open: d => `yopilmagan kunlar: ${d}`, gaps: d => `varaq raqamlari uzluksiz emas: ${d}`,
+      noDays: 'bu yilda yopilgan kassa kuni yo‘q' },
     debit: 'Debet', credit: 'Kredit', corr: 'korrespondensiyalovchi hisobvaraq, subschyot', an: 'analitik hisob kodi',
     sum: 'Summa, so‘m', target: 'Maqsadli yo‘nalish belgisi',
     from: 'Olindi', to: 'Berilsin', basis: 'Asosi', attach: 'Ilovasi', amount: 'Summa', words: 'so‘z bilan',
@@ -128,6 +142,12 @@ const T = {
   ru: {
     html: 'ru', stir: 'ИНН', no: '№',
     ko1: 'ПРИХОДНЫЙ КАССОВЫЙ ОРДЕР', ko2: 'РАСХОДНЫЙ КАССОВЫЙ ОРДЕР', patta: 'КВИТАНЦИЯ', pattaSub: 'к приходному кассовому ордеру',
+    qrHint: 'Проверка оплаты: отсканируйте QR-код телефоном',
+    cv: { title: 'КАССОВАЯ КНИГА', sub: 'вкладные листы формы КО-4 (1-й экземпляр)', year: y => `${y} год`, desk: 'Касса', from: 'Начата', to: 'Окончена',
+      sheets: 'Листы', range: (a, b, n) => `№ ${a} — № ${b} (${n} шт.)`, ko1: 'Приходные кассовые ордера', ko2: 'Расходные кассовые ордера', none: 'нет',
+      cert: 'ЗАВЕРИТЕЛЬНАЯ НАДПИСЬ', certText: (n, w) => `В данной кассовой книге пронумеровано, прошнуровано и скреплено печатью ${n} (${w}) ${ruPl(n, 'лист', 'листа', 'листов')}.`,
+      warn: 'КНИГА НЕ ЗАВЕРШЕНА', notEnded: 'год ещё не окончен', open: d => `незакрытые дни: ${d}`, gaps: d => `нумерация листов прерывается: ${d}`,
+      noDays: 'в этом году нет закрытых кассовых дней' },
     debit: 'Дебет', credit: 'Кредит', corr: 'корреспондирующий счёт, субсчёт', an: 'код аналитического учёта',
     sum: 'Сумма, сум', target: 'Код целевого назначения',
     from: 'Принято от', to: 'Выдать', basis: 'Основание', attach: 'Приложение', amount: 'Сумма', words: 'прописью',
@@ -336,6 +356,7 @@ table{border-collapse:collapse;width:100%}
 .patta .pn{font-size:7.5pt;text-align:right;min-height:3mm}
 .patta .nf{margin-top:2.5mm;text-align:center;font-weight:bold;border:.8pt solid #000;padding:.6mm 1mm}
 .patta .seal{margin-top:2mm}
+.patta .pqr{margin-top:2mm;text-align:center;font-size:7pt;line-height:1.15}.patta .pqr img{display:block;width:21mm;height:21mm;margin:0 auto .8mm;image-rendering:pixelated}
 .cutline{position:absolute;left:0;top:148.5mm;width:210mm;border-top:.4pt dashed #777}
 .ko2 .two{display:flex;gap:8mm}.ko2 .two .sig{flex:1}
 .cap{font-size:6.5pt;text-align:center;margin-top:.2mm}
@@ -363,6 +384,16 @@ table{border-collapse:collapse;width:100%}
 .mx tr.sh td{font-weight:bold;letter-spacing:.3pt;background:#eee}.mx tr.tot td{font-weight:bold;border-top:1pt solid #000}
 .mx td.an{overflow-wrap:anywhere}.mx .src{font-size:7.5pt;margin-top:1.5mm}.mx .sumj b{white-space:nowrap}
 .jr .warnj{margin-top:2mm;font-weight:bold;border:.8pt solid #000;padding:.8mm 1.5mm}
+.cv,.crt{height:296mm;padding:12mm 18mm}
+.cv .cvt,.crt .cvt{text-align:center;font-weight:bold;font-size:24pt;letter-spacing:2pt;margin-top:42mm}
+.crt .cvt{font-size:16pt;margin-top:34mm}
+.cv .cvs{text-align:center;font-size:11pt;margin-top:2mm}
+.cv .cvy{text-align:center;font-weight:bold;font-size:18pt;margin-top:8mm}
+.cv .cvd{width:130mm;margin:16mm auto 0}.cv .cvd td{font-size:11pt;padding:1.6mm 2.5mm}
+.cvw{margin-top:10mm;border:1pt solid #000;padding:2mm 3mm;font-size:10pt}
+.crt .crtx{font-size:12.5pt;line-height:1.7;margin:12mm 6mm 0;text-indent:10mm}
+.crt .sig{margin:12mm 6mm 0}.crt .crtd{margin:10mm 6mm 0}.crt .seal{margin:4mm 6mm 0}
+.cv .ft,.crt .ft{position:absolute;left:18mm;right:18mm;bottom:6mm;margin:0}
 `;
 const page = (title, t, body) => `<!DOCTYPE html><html lang="${t.html}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>${body}</body></html>`;
 
@@ -377,6 +408,8 @@ function ko1Html(doc, ctx, W, t, lang) {
   const chief = { title: t.chief, name: cashier };
   const fiscal = doc.fiscalNo ? esc(doc.fiscalNo) : (doc.fiscalExempt ? esc(t.fiscalExempt) : '');
   const wm = doc.status === 'void' ? `<div class="wm">${esc(t.mVoid)}</div>` : '';
+  // F2.12: pattadagi QR (verify.html?k=…) — chaqiruvchi tayyorlagan rasm (faqat data:image/…; kalitsiz orderda yo'q)
+  const qr = typeof ctx.qr === 'string' && /^data:image\/(png|gif|jpeg);base64,[A-Za-z0-9+/=]+$/.test(ctx.qr) ? ctx.qr : '';
   const rows = (cash.length ? cash : [{ debit: '5010', credit: '', amount: doc.amount }]).map(l =>
     `<tr><td class="c">${esc(l.debit)}</td><td class="c">${esc(l.credit)}</td><td class="c">${esc(anCode(l, doc))}</td><td class="r">${esc(money(W, l.amount))}</td><td class="c">${esc(l.articleId || 'X')}</td></tr>`).join('');
   const order = `<div class="order">${wm}
@@ -410,6 +443,7 @@ function ko1Html(doc, ctx, W, t, lang) {
     <div class="seal">${esc(t.seal)}</div>
     <div class="nf">${esc(t.notFiscal)}</div>
     ${fiscal ? `<div class="note">${esc(t.fiscal)}: ${fiscal}</div>` : ''}
+    ${qr ? `<div class="pqr"><img src="${esc(qr)}" alt="QR"><div>${esc(t.qrHint)}</div></div>` : ''}
     ${voidInfo(doc, ctx, t)}</div>`;
   return `<div class="pg"><div class="ko1">${order}<div class="cut"></div>${patta}</div><div class="cutline"></div></div>`;
 }
@@ -1411,4 +1445,42 @@ export function paySheetHtml(sh, ctx, W) {
     ${sig(x.acq, p.name || '')}
     <div class="ft">${esc(ft.join(' · '))}</div></div>`;
   return page(`${x.title} — ${p.name || ''} — ${y}/${y + 1}`, t, html);
+}
+
+// ---------------------------------------------------------------- kassa kitobi: yil muqovasi va guvohnoma (F2.12)
+//   Yil oxirida kunlik KO-4 varaqlarining 1-nusxalari muqova bilan tikiladi, ip o'tkaziladi va muhrlanadi; guvohnoma — varaqlar soni
+//   (raqam va so'z bilan), rahbar va bosh buxgalter imzosi, sana, muhr. cover — kassa_book_cover javobi. To'liq bo'lmasa (yil tugamagan,
+//   ochiq kun, varaq raqamlari uzilgan, yopilgan kun yo'q) — «ҚОРАЛАМА» belgisi va sabablar: bunday nusxa tikilmaydi.
+export function coverHtml(cover, ctx, W) {
+  ctx = ctx || {}; cover = cover || {};
+  const lang = langOf(ctx), t = T[lang], c = t.cv, o = ctx.org || {};
+  const n = num(cover.sheets), draft = !cover.complete, warns = [];
+  if (!cover.yearEnded) warns.push(c.notEnded);
+  if ((cover.openDays || []).length) warns.push(c.open(cover.openDays.map(dmy).join(', ')));
+  if ((cover.gaps || []).length) warns.push(c.gaps(cover.gaps.map(dmy).join(', ')));
+  if (!num(cover.closedDays)) warns.push(c.noDays);
+  const mark = Object.assign({}, ctx.mark || {}, draft ? { draft: true } : {});
+  const marks = marksOf(null, Object.assign({}, ctx, { isTest: !!(ctx.isTest || cover.isTest), mark }), t);
+  const nos = x => x && x.first ? c.range(x.first, x.last, x.count) : c.none;
+  const warnHtml = draft ? `<div class="cvw"><b>${esc(c.warn)}:</b> ${esc(warns.join('; '))}</div>` : '';
+  const head = pickSign(ctx, 1, null, t.head), chief = pickSign(ctx, 2, null, t.chief);
+  const ft = footer({ id: `${cover.desk || ''} · ${cover.year || ''}` }, ctx, t);
+  const cv = `<div class="pg cv"><div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
+    <div class="cvt">${esc(c.title)}</div><div class="cvs">${esc(c.sub)}</div>
+    <div class="cvy">${esc(c.year(cover.year))}</div>
+    <table class="t cvd"><tbody>
+      <tr><td>${esc(c.desk)}</td><td><b>${esc(cover.deskName || cover.desk || '')}</b></td></tr>
+      <tr><td>${esc(c.from)}</td><td>${esc(dmy(cover.firstDay) || '—')}</td></tr>
+      <tr><td>${esc(c.to)}</td><td>${esc(dmy(cover.lastDay) || '—')}</td></tr>
+      <tr><td>${esc(c.sheets)}</td><td><b>${n ? esc(c.range(cover.sheetFrom, cover.sheetTo, n)) : esc(c.none)}</b></td></tr>
+      <tr><td>${esc(c.ko1)}</td><td>${esc(nos(cover.ko1))}</td></tr>
+      <tr><td>${esc(c.ko2)}</td><td>${esc(nos(cover.ko2))}</td></tr>
+    </tbody></table>${warnHtml}${ft}</div>`;
+  const crt = `<div class="pg crt"><div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
+    <div class="cvt">${esc(c.cert)}</div>
+    <p class="crtx">${esc(c.certText(n, W.countWords(n, lang)))}</p>
+    ${sig(head.title, head.name)}${sig(chief.title, chief.name)}
+    <div class="crtd">${esc(t.date)}: «____» ______________ 20____</div><div class="seal">${esc(t.seal)}</div>
+    ${warnHtml}${ft}</div>`;
+  return page(`${c.title} — ${cover.year || ''}`, t, cv + crt);
 }

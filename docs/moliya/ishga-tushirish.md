@@ -299,8 +299,13 @@ fiskal chek paydo bo‘ladi). Tartib:
   tugagach kassirga ayting (kassir shungacha kassa hujjati yozmaydi).
 - [ ] Ertalab «Kassa»: «Oxirgi qoldiq» = boshlang‘ich qoldiq = kassadagi haqiqiy pul (farq bo‘lsa — birinchi hujjatdan oldin qayta sanab, qayta kiriting); qizil ogohlantirish yo‘q.
 - [ ] Birinchi naqd o‘quv to‘lovi: NKM da fiskal chek urildi → «💵 To‘lov» (chek raqami bilan) → «🖨 Kirim orderi va patta»; patta to‘lovchiga, order kassada.
+  Pattadagi QR (reliz 21) — to‘lovchi telefonda skanerlab, pul maktab kassa hisobiga kirganini o‘zi tekshiradi (tekshirish sahifasida faqat
+  order raqami, sana, summa, maktab nomi va holat; ism yo‘q). Order keyin bekor qilinsa — sahifa «bekor qilingan» deydi.
 - [ ] Birinchi chiqim: «+ Chiqim so‘rovi» → moliya menejeri «Tasdiqlash» → kassir «Pulni berish» → «🖨 Chiqim orderi», oluvchi imzosi.
 - [ ] Kechqurun: NKM Z-hisoboti (naqd + karta, bitta) → «Kunni yopish» — pul sanaladi, summa va Z-hisobot kiritiladi; «🖨 KO-4» ikki nusxa (kassa kitobi varag‘i va kassir hisoboti) va «🖨 Kunlik hisobot».
+  Kassa kitobi varaqlari (1-nusxa) jildda saqlanadi; yil oxirida «Kassa» → «Kitob» — muqova va guvohnoma chop etiladi (varaqlar soni
+  tizimdan, raqam va so‘z bilan), varaqlar tikilib, ip o‘tkaziladi va muhrlanadi; guvohnomani rahbar va bosh buxgalter imzolaydi. Oyna
+  «to‘liq emas» desa (yopilmagan kun, varaq raqamlari uzilgan, yil tugamagan) — avval sababini bartaraf eting.
 - [ ] Buxgalter (u yo‘q kuni — moliya menejeri): qog‘ozlarni olib, «Tekshirish» → «Tekshirdim».
 - [ ] Direktor: Telegram hisobotida kassa bloki (kirim, chiqim, qoldiq, sanash) va nazorat qatori. Hisobot kunlari va soati — «Xabarnomalar» →
   «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju (yangi o‘rnatishda standart shunday; mavjud bazada «Sh» belgilangan bo‘lsa — olib tashlanadi), soat — kassa yopilgandan keyin (standart 19:00).

@@ -582,10 +582,52 @@ language sql stable security definer set search_path = public, app, pg_temp as $
            'fixes', coalesce((select jsonb_agg(jsonb_build_object('id', f.id, 'status', f.status, 'no', f.no, 'year', f.year, 'actDay', f."actDay")
                                                order by f."requestedAt", f.id)
                                 from public.cash_doc_fixes f where f."docId" = c.id and f.status in ('pending', 'approved')), '[]'::jsonb),
-           'eff', app.kassa_eff_doc(c.id))
+           'eff', app.kassa_eff_doc(c.id),
+           -- F2.12: patta QR kaliti (faqat o'tkazilgan kirim orderida; tekshirish — public.verify_patta)
+           'vtok', (select v.token from public.cash_doc_verify v where v."docId" = c.id))
     from public.cash_docs c where c.id = p_id
 $$;
 revoke all on function app.kassa_doc_json(text) from public, anon, authenticated;
+
+-- ---------- Patta tekshiruvi (F2.12, reliz 21) ----------
+-- Kalit kirim orderi (KO-1) raqam olganda yaratiladi; bekor qilingan orderning kaliti qoladi — tekshirish sahifasi «bekor qilingan» deydi.
+create or replace function app.kassa_vtok() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+begin
+  if new.form = 'KO1' and new.no is not null then
+    insert into public.cash_doc_verify ("docId", token) values (new.id, replace(gen_random_uuid()::text, '-', ''))
+      on conflict ("docId") do nothing;
+  end if;
+  return null;
+end $$;
+revoke all on function app.kassa_vtok() from public, anon, authenticated;
+drop trigger if exists trg_kassa_vtok on public.cash_docs;
+create trigger trg_kassa_vtok after insert or update of no on public.cash_docs for each row execute function app.kassa_vtok();
+-- reliz 21 dan oldingi kirim orderlari (zanjir takror ishga tushsa — mavjud kalit o'zgarmaydi)
+insert into public.cash_doc_verify ("docId", token)
+  select c.id, replace(gen_random_uuid()::text, '-', '') from public.cash_docs c
+   where c.form = 'KO1' and c.no is not null and not exists (select 1 from public.cash_doc_verify v where v."docId" = c.id);
+
+-- Tekshirish (verify.html?k=): mehmon (anon) ham chaqiradi. Faqat: haqiqiy / emas, holat (o'tkazilgan / bekor qilingan va sanasi),
+--   raqam, sana, summa, tashkilot nomi, sinov kassasi belgisi. To'lovchi, o'quvchi, asos, kassir, fiskal chek — QAYTARILMAYDI.
+--   Nomi verify_doc (public-close.sql) kabi — kassa_* / fin_* doirasidan tashqarida: moliya funksiyalari qoidasi (mehmonga yopiq, avval
+--   «ruxsat yo'q» — kassa-checks 6-band, test-kassa H9) qat'iyligicha qoladi; bu funksiya ataylab ochiq va faqat kalit bo'yicha o'qiydi.
+create or replace function public.verify_patta(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v_doc public.cash_docs%rowtype; v_test boolean; v_org text;
+begin
+  p_token := lower(btrim(coalesce(p_token, '')));
+  if p_token !~ '^[0-9a-f]{32}$' then return jsonb_build_object('valid', false); end if;
+  select c.* into v_doc from public.cash_doc_verify v join public.cash_docs c on c.id = v."docId" where v.token = p_token;
+  if not found or v_doc.no is null or v_doc.form <> 'KO1' then return jsonb_build_object('valid', false); end if;
+  v_test := coalesce((select k."isTest" from public.cash_desks k where k.id = v_doc.desk), false);
+  select coalesce(nullif(btrim(o."nameUz"), ''), nullif(btrim(o."nameRu"), ''), '') into v_org from public.fin_org o where o.id = 'main';
+  return jsonb_build_object('valid', true, 'status', v_doc.status, 'form', v_doc.form, 'no', v_doc.no, 'year', v_doc.year,
+    'day', to_char(v_doc."businessDay", 'YYYY-MM-DD'), 'amount', trim_scale(v_doc.amount), 'org', coalesce(v_org, ''), 'isTest', v_test,
+    'voidedAt', case when v_doc.status = 'void' then to_char(v_doc."voidedAt" at time zone 'Asia/Tashkent', 'YYYY-MM-DD') end);
+end $$;
+revoke all on function public.verify_patta(text) from public;
+grant execute on function public.verify_patta(text) to anon, authenticated, service_role;
 
 -- ---------- KO-1: kirim orderi ----------
 --   Xodim bilan hisob-kitob kirimlari (kassa-links.sql): «Hisobdordan qaytim» hisobdordagi hisobot qilinmagan qoldiqdan, «Kamomadni

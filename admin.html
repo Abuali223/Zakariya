@@ -1625,7 +1625,7 @@ function navRebuild(){
   setTabBadge('enrollments', BADGES.enrollments||0); setTabBadge('applications', BADGES.applications||0);
 }
 // Modullarga beriladigan yordamchilar (modul admin.html ichki funksiyalarini shu orqali ishlatadi).
-function finCtx(){ return { $, esc, toast, rpc, fmtSom, openModal, closeModal, printHTML, SESSION, finMod,
+function finCtx(){ return { $, esc, toast, rpc, fmtSom, openModal, closeModal, printHTML, SESSION, finMod, qrDataUrl,   // qrDataUrl — F2.12: patta QR
   cpList:()=>loadCol('fin_counterparties'),   // F2.2: kontragentlar ro'yxati (o'qish — kassa rollari, RLS)
   students:async()=>{ const a=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=a; return a; },
   // Kunni yopish / smena topshirish (state-2): qurilma navbatidagi hali yuborilmagan naqd to'lovlar — har biri kaliti (payId) va summasi

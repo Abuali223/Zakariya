@@ -208,6 +208,7 @@ declare r record; col record; v_cols text[]; v_vals text[]; v_sql text; v_n int;
     "canteen_menu": {"id": "2026-11-02"}, "cash_counts": {"kind": "close"}, "cash_day_events": {"kind": "open"},
     "cash_days": {"status": "open"}, "cash_doc_fixes": {"status": "pending"}, "cash_doc_lines": {"cash": "false", "debit": "1010", "credit": "2010"},
     "cash_docs": {"form": "KO1", "status": "draft", "partyType": "other"}, "cash_handovers": {"status": "pending"},
+    "cash_doc_verify": {"token": "00000000000000000000000000000000"},
     "cash_prints": {"kind": "doc", "mode": "original", "docId": "zz_doc"}, "discount_requests": {"kind": "none", "status": "pending"},
     "enrollment_events": {"type": "note"}, "fin_counterparties": {"kind": "other", "name": "Sinov Hamkor"},
     "fin_exp_docs": {"origin": "legacy", "status": "void", "voidReason": "zz", "voidedAt": "2026-11-02 10:00:00+05"},

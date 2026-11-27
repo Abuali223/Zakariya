@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as W from './fin-words.js';
-import { docHtml, bookHtml, countHtml, bookRows, reportHtml, journalHtml, journalSheet, matrixHtml, matrixSheet, daysSheet, advSheet, packSheets } from './fin-print.js';
+import { docHtml, bookHtml, countHtml, bookRows, reportHtml, journalHtml, journalSheet, matrixHtml, matrixSheet, daysSheet, advSheet, packSheets, coverHtml } from './fin-print.js';
 import { createRequire } from 'node:module';
 
 const org = { nameUz: '«SINOV MAKTAB» МЧЖ', nameRu: 'ООО «SINOV MAKTAB»', stir: '123456789', place: 'Тошкент ш.', printLang: 'uz-cyrl', extra: {} };
@@ -817,4 +817,50 @@ test('g7 qoldig‘i: «hali o‘tkazilmagan yozuvlar» tarkibi — qurilma navba
   assert.ok(text(countHtml(q, b, ctx(), W)).includes('шу жумладан: қурилма навбатидаги ёзувлар — 2 та, 15 000=00 15 000=00'));
   // hali o'tkazilmagan yo'q — tarkib qatori yo'q
   assert.ok(!text(countHtml(b.counts[0], mkBook(), ctx(), W)).includes('шу жумладан'));
+});
+
+// ---------------------------------------------------------------- F2.12: patta QR va kassa kitobi muqovasi / guvohnomasi
+const QR = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+test('F2.12: pattada QR — faqat chaqiruvchi bergan data:image rasm (tekshirish yozuvi bilan); boshqa manzil yoki qiymat — yo‘q; KO-2 da yo‘q', () => {
+  const h1 = docHtml(ko1, ctx({ qr: QR }), W);
+  assert.equal(count(h1, `<img src="${QR}"`), 1);
+  assert.ok(text(h1).includes('Тўловни текшириш: QR кодни телефонда сканерланг'));
+  for (const bad of ['javascript:alert(1)', 'https://misol.test/q.png', 'data:image/svg+xml;base64,PHN2Zz4=', 'data:image/gif;base64,R0lG"><b>', 1, null]) {
+    const h = docHtml(ko1, ctx({ qr: bad }), W);
+    assert.ok(!h.includes('<img'), String(bad));
+    assert.ok(!text(h).includes('QR кодни'), String(bad));
+  }
+  assert.ok(!docHtml(ko1, ctx(), W).includes('<img'));
+  const ko2d = Object.assign({}, ko1, { form: 'KO2', op: 'out_expense', partyType: 'other', partyName: 'Sinov Oluvchi' });
+  assert.ok(!docHtml(ko2d, ctx({ qr: QR }), W).includes('<img'));
+  assert.ok(text(docHtml(ko1, ctx({ qr: QR, lang: 'ru' }), W)).includes('Проверка оплаты: отсканируйте QR-код телефоном'));
+  assert.ok(text(docHtml(ko1, ctx({ qr: QR, lang: 'uz-latn' }), W)).includes('To‘lovni tekshirish: QR kodni telefonda skanerlang'));
+});
+const cover = { ok: true, desk: 'main', deskName: 'Asosiy kassa', isTest: false, year: 2026, yearEnded: true, firstDay: '2026-01-05', lastDay: '2026-12-30',
+  days: 240, closedDays: 240, openDays: [], sheetFrom: 1, sheetTo: 252, sheets: 252, gaps: [], ko1: { first: 1, last: 3150, count: 3150 }, ko2: { first: 1, last: 812, count: 812 }, complete: true };
+test('F2.12: kassa kitobi — muqova (yil, kassa, sanalar, varaqlar, orderlar) va guvohnoma (varaqlar soni raqam va so‘z bilan, rahbar va bosh buxgalter, muhr) — uch tilda', () => {
+  const h = coverHtml(cover, ctx(), W), tx = text(h);
+  assert.equal(count(h, 'class="pg cv"'), 1); assert.equal(count(h, 'class="pg crt"'), 1);
+  for (const s of ['КАССА КИТОБИ', 'КО-4 шаклидаги варақлар (1-нусха)', '2026 йил', 'Касса Asosiy kassa', 'Бошланди 05.01.2026', 'Тугади 30.12.2026',
+    'Варақлар № 1 — № 252 (252 та)', 'Кирим касса ордерлари № 1 — № 3150 (3150 та)', 'Чиқим касса ордерлари № 1 — № 812 (812 та)', 'ГУВОҲНОМА',
+    'Ушбу касса китобида 252 (икки юз эллик икки) варақ рақамланган, ип ўтказилган ва муҳр билан маҳкамланган.', 'Раҳбар', 'Синов Д.Д.', 'Бош бухгалтер', 'Синов Б.Б.', 'М.Ў.'])
+    assert.ok(tx.includes(s), s);
+  assert.ok(!tx.includes('ҚОРАЛАМА') && !tx.includes('КИТОБ ТЎЛИҚ ЭМАС'));
+  const ru = text(coverHtml(cover, ctx({ lang: 'ru' }), W));
+  assert.ok(ru.includes('КАССОВАЯ КНИГА') && ru.includes('2026 год') && ru.includes('ЗАВЕРИТЕЛЬНАЯ НАДПИСЬ'));
+  assert.ok(ru.includes('В данной кассовой книге пронумеровано, прошнуровано и скреплено печатью 252 (двести пятьдесят два) листа.'), ru);
+  assert.ok(text(coverHtml(Object.assign({}, cover, { sheets: 251, sheetTo: 251 }), ctx({ lang: 'ru' }), W)).includes('(двести пятьдесят один) лист.'));
+  assert.ok(text(coverHtml(Object.assign({}, cover, { sheets: 245, sheetTo: 245 }), ctx({ lang: 'ru' }), W)).includes('(двести сорок пять) листов.'));
+  assert.ok(text(coverHtml(Object.assign({}, cover, { sheets: 212, sheetTo: 212 }), ctx({ lang: 'ru' }), W)).includes('(двести двенадцать) листов.'));
+  const la = text(coverHtml(cover, ctx({ lang: 'uz-latn' }), W));
+  assert.ok(la.includes('KASSA KITOBI') && la.includes('GUVOHNOMA') && la.includes('Ushbu kassa kitobida 252 (ikki yuz ellik ikki) varaq raqamlangan, ip o‘tkazilgan va muhr bilan mahkamlangan.'));
+});
+test('F2.12: kitob to‘liq emas — «ҚОРАЛАМА» va sabablar (yil tugamagan, ochiq kun, uzilish, yopilgan kun yo‘q); sinov kassasi — «СИНОВ»', () => {
+  const d = Object.assign({}, cover, { yearEnded: false, complete: false, openDays: ['2026-12-30'], gaps: ['2026-11-03'] });
+  const tx = text(coverHtml(d, ctx(), W));
+  assert.ok(tx.includes('ҚОРАЛАМА'));
+  assert.equal(count(tx, 'КИТОБ ТЎЛИҚ ЭМАС: йил ҳали тугамаган; ёпилмаган кунлар: 30.12.2026; варақ рақамлари узлуксиз эмас: 03.11.2026'), 2);   // muqova va guvohnomada
+  const e = text(coverHtml({ desk: 'sinov', deskName: 'Sinov kassasi', isTest: true, year: 2027, yearEnded: false, days: 0, closedDays: 0, openDays: [], gaps: [], sheets: 0, complete: false }, ctx(), W));
+  assert.ok(e.includes('СИНОВ') && e.includes('Варақлар йўқ') && e.includes('бу йилда ёпилган касса куни йўқ') && e.includes('Кирим касса ордерлари йўқ'));
+  assert.ok(e.includes('Ушбу касса китобида 0 (ноль) варақ'), e.slice(0, 600));
 });

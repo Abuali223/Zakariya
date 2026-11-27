@@ -80,8 +80,11 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          usul va hujjat yo'q); naqd ko'rinishlar — kind bo'yicha (kassa_cash_guard, kassa_cash_rows, kassa_reconcile_range P4,
 --          fin_exp_legacy_check); fin_refund_credit — o'quvchi avansini naqdsiz (bank / karta) qaytarish (Direktor; idempotent;
 --          kutilayotgan naqd so'rovlar bilan), refunds.payee; kassa_refund_request — shu oyna kaliti bilan naqdsiz qaytarish bo'lsa rad.
+--     21 — 2-bosqich F2.12: patta tekshiruv kaliti — cash_doc_verify (KO-1 raqam olganda, trigger trg_kassa_vtok / app.kassa_vtok; eski
+--          kirim orderlariga zanjirda), app.kassa_doc_json → vtok, public.verify_patta (mehmon ham; ismsiz: holat, raqam, sana, summa,
+--          tashkilot); public.kassa_book_cover — kassa kitobi yil muqovasi va varaqlar guvohnomasi (KO-4 varaqlari, uzilish, ochiq kun).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 20 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 21 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

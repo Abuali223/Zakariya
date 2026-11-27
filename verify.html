@@ -43,6 +43,8 @@
   // Hujjatni tekshirish (D6): QR'dagi kod (?t=, 32 belgi) verify_doc orqali tekshiriladi. Sahifa FAQAT: haqiqiy/emas, hujjat
   //   turi, berilgan sana, o'quvchining qisqa ismi (Aziza K.) va sinf raqamini (hujjat berilgan paytdagi holat) ko'rsatadi —
   //   ID, JSHSHIR, ball, telefon yo'q.
+  //   Kassa pattasi (F2.12, ?k=, 32 belgi): verify_patta — kirim orderi raqami, sanasi, summasi, tashkilot nomi va holati (o'tkazilgan /
+  //   bekor qilingan); to'lovchi, o'quvchi, asos, kassir — yo'q.
   //   Eski QR'lar (?id=<o'quvchi ID>) endi tekshirilmaydi — maktabga murojaat qilish tavsiya etiladi.
   const T={
     uz:{ sub:'Hujjat haqiqiyligini tekshirish', wait:'Tekshirilmoqda…',
@@ -53,6 +55,12 @@
       old:'Eski turdagi QR kod', oldmsg:'Bu hujjat eski turdagi QR kodga ega. Haqiqiyligini tekshirish uchun maktabga murojaat qiling.',
       phone:'Maktab telefoni', kind:'Hujjat turi', date:'Berilgan sana', name:'O‘quvchi', grade:'Sinf', none:'—',
       kinds:{profile:'O‘quvchi profili — rasmiy ma’lumotnoma',certificate:'Ma’lumotnoma'},
+      kOk:'Haqiqiy to‘lov hujjati — kassa kirim orderi', kVoid:'Bu kirim orderi bekor qilingan', kOrg:'Tashkilot', kNo:'Kirim orderi', kDate:'Sana',
+      kSum:'Summa', kState:'Holat', kPosted:'Kassaga kirim qilingan', kVoided:d=>`Bekor qilingan${d?` (${d})`:''}`, cur:'so‘m',
+      kTest:'Sinov kassasi — haqiqiy to‘lov emas',
+      kMsg:'Qog‘ozdagi raqam, sana va summani shu yerdagisi bilan solishtiring. Sahifa to‘lov maktab kassasi hisobiga kirganini tasdiqlaydi; to‘lovchi ma’lumotlari ko‘rsatilmaydi.',
+      kVoidMsg:'Order bekor qilingan — pul qaytarilgan yoki yozuv xato bo‘lgan bo‘lishi mumkin. Savol bo‘lsa, maktab kassasiga murojaat qiling.',
+      kno:'Bunday to‘lov hujjati topilmadi. Hujjat haqiqiy bo‘lmasligi mumkin — maktab kassasiga murojaat qiling.',
       gr:g=>Number(g)===0?'Tayyorlov':(Number(g)===13?'Variativ':g+'-sinf'),
       okmsg:'Qog‘ozdagi ism va sinfni shu yerdagisi bilan solishtiring — ular hujjat berilgan paytdagi holat. Sana — shu kod birinchi marta berilgan kun: xuddi shu ma’lumot bilan qayta chop etilgan nusxada kod o‘zgarmaydi, sinf o‘zgargandan keyin chop etilgan hujjatda esa boshqa kod bo‘ladi. Baholar va boshqa ma’lumotlar bu sahifada ko‘rsatilmaydi — kerak bo‘lsa maktabdan so‘rang.',
       foot:'Bu sahifa hujjat Iqror Academy tomonidan berilganini tekshiradi.' },
@@ -64,6 +72,12 @@
       old:'QR-код старого образца', oldmsg:'Этот документ содержит QR-код старого образца. Чтобы проверить его подлинность, обратитесь в школу.',
       phone:'Телефон школы', kind:'Тип документа', date:'Дата выдачи', name:'Ученик', grade:'Класс', none:'—',
       kinds:{profile:'Профиль ученика — официальная справка',certificate:'Справка'},
+      kOk:'Подлинный платёжный документ — приходный кассовый ордер', kVoid:'Этот приходный ордер аннулирован', kOrg:'Организация', kNo:'Приходный ордер',
+      kDate:'Дата', kSum:'Сумма', kState:'Статус', kPosted:'Принято в кассу', kVoided:d=>`Аннулирован${d?` (${d})`:''}`, cur:'сум',
+      kTest:'Тестовая касса — не настоящий платёж',
+      kMsg:'Сравните номер, дату и сумму с бумажным документом. Страница подтверждает, что оплата поступила в кассу школы; данные плательщика не показываются.',
+      kVoidMsg:'Ордер аннулирован — деньги могли быть возвращены или запись была ошибочной. При вопросах обратитесь в кассу школы.',
+      kno:'Такой платёжный документ не найден. Документ может быть недействительным — обратитесь в кассу школы.',
       gr:g=>Number(g)===0?'Подготовка':(Number(g)===13?'Вариатив':g+' класс'),
       okmsg:'Сравните имя и класс с бумажным документом — это данные на момент выдачи. Дата — день, когда этот код выдан впервые: при повторной печати с теми же данными код не меняется, а у документа, распечатанного после перехода в другой класс, будет другой код. Оценки и другие данные на этой странице не показываются — при необходимости обратитесь в школу.',
       foot:'Эта страница проверяет, что документ выдан Iqror Academy.' }
@@ -72,10 +86,12 @@
   const out=document.getElementById('out');
   const qs=new URLSearchParams(location.search);
   const tok=String(qs.get('t')||'').trim().toLowerCase();
+  const ktok=String(qs.get('k')||'').trim().toLowerCase();   // kassa pattasi (F2.12)
   const legacyId=String(qs.get('id')||'').trim();
   let lang='uz'; try{ const s=localStorage.getItem('iqror-lang'); if(s==='uz'||s==='ru') lang=s; else if(/^ru/i.test(navigator.language||'')) lang='ru'; }catch(e){}
   let view={k:'wait'};
   const fmtDate=d=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||'')); return m?`${m[3]}.${m[2]}.${m[1]}`:''; };
+  const fmtSum=(n,t)=>String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g,' ')+' '+t.cur;
   function draw(){
     const t=T[lang]; document.documentElement.lang=lang;
     document.getElementById('sub').textContent=t.sub; document.getElementById('foot').textContent=t.foot;
@@ -90,6 +106,16 @@
           <tr><td class="k">${esc(t.name)}</td><td><b>${esc(r.name||t.none)}</b></td></tr>
           <tr><td class="k">${esc(t.grade)}</td><td>${esc(r.grade==null?t.none:t.gr(r.grade))}</td></tr>
         </tbody></table><p class="msg" style="text-align:center">${esc(t.okmsg)}</p>`; return; }
+    if(view.k==='pay'){ const r=view.r, v=r.status==='void';
+      out.innerHTML=`<div class="state"><div class="big">${v?'⚠️':'✅'}</div><span class="badge ${v?'old':'ok'}" id="k-badge">${esc(v?t.kVoid:t.kOk)}</span></div>
+        <table id="k-tbl"><tbody>
+          <tr><td class="k">${esc(t.kOrg)}</td><td><b>${esc(r.org||t.none)}</b></td></tr>
+          <tr><td class="k">${esc(t.kNo)}</td><td><b>№ ${esc(String(r.no||''))}</b>${r.year?` · ${esc(String(r.year))}`:''}</td></tr>
+          <tr><td class="k">${esc(t.kDate)}</td><td><b>${esc(fmtDate(r.day)||t.none)}</b></td></tr>
+          <tr><td class="k">${esc(t.kSum)}</td><td><b>${esc(fmtSum(r.amount,t))}</b></td></tr>
+          <tr><td class="k">${esc(t.kState)}</td><td>${esc(v?t.kVoided(fmtDate(r.voidedAt)):t.kPosted)}</td></tr>
+        </tbody></table>${r.isTest?`<p class="msg" style="text-align:center;color:#a15c07"><b>${esc(t.kTest)}</b></p>`:''}
+        <p class="msg" style="text-align:center">${esc(v?t.kVoidMsg:t.kMsg)}</p>`; return; }
     if(view.k==='old'){ const ph=String(view.phone||'').trim();
       out.innerHTML=`<div class="state"><div class="big">ℹ️</div><span class="badge old">${esc(t.old)}</span><p class="msg">${esc(t.oldmsg)}</p>
         ${ph?`<p style="margin:10px 0 0;font-size:15px">${esc(t.phone)}: <a href="tel:${esc(ph.replace(/[^+\d]/g,''))}"><b>${esc(ph)}</b></a></p>`:''}</div>`; return; }
@@ -110,6 +136,14 @@
       if(!/^[0-9a-f]{32}$/.test(tok)){ view={k:'badfmt'}; draw(); return; }
       try{ const fs=await db(); const r=await fs.rpc('verify_doc', { p_token:tok });
         view=(r && r.valid===true) ? {k:'ok', r} : {k:'notfound'}; }
+      catch(e){ view={k:'err'}; }
+      draw(); return;
+    }
+    if(ktok){
+      // Kassa pattasi: kod formati (32 ta 0-9/a-f) — noto'g'ri bo'lsa bazaga so'rov yuborilmaydi.
+      if(!/^[0-9a-f]{32}$/.test(ktok)){ view={k:'badfmt'}; draw(); return; }
+      try{ const fs=await db(); const r=await fs.rpc('verify_patta', { p_token:ktok });
+        view=(r && r.valid===true) ? {k:'pay', r} : {k:'kno'}; }
       catch(e){ view={k:'err'}; }
       draw(); return;
     }

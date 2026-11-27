@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
   deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
-  pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN, outboxDeclare, deskOutbox } from './fin-kassa.js';
+  pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN, outboxDeclare, deskOutbox, bookCoverWhy, verifyLink } from './fin-kassa.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -756,4 +756,18 @@ test('js-3: sinov kassasi — qurilma navbati (o‘quv to‘lovlari asosiy kassa
   assert.deepEqual(outboxDeclare(deskOutbox('sinov', ob), {}), { refs: [], count: 0, sum: 0, old: false, failed: 0, cash: 0, drop: [], missing: 0 }, 'sinov kassasida pendingRefs bo‘sh, tanlov ham yo‘q');
   const src = readFileSync(new URL('./fin-kassa.js', import.meta.url), 'utf8');
   assert.equal((src.match(/const ob = deskOutbox\(ST\.desk, C\.outboxCash \? C\.outboxCash\(\) : null\);/g) || []).length, 2, 'yopish va smena oynasi');
+});
+
+// ---------------------------------------------------------------- F2.12: kassa kitobi muqovasi va patta tekshiruv havolasi
+test('F2.12 bookCoverWhy: to‘liq kitob — sabab yo‘q; yil tugamagan, ochiq kunlar, uzilish, yopilgan kun yo‘q — har biri o‘z matni bilan', () => {
+  assert.deepEqual(bookCoverWhy({ yearEnded: true, openDays: [], gaps: [], closedDays: 240 }), []);
+  assert.deepEqual(bookCoverWhy({ yearEnded: false, openDays: ['2026-12-30', '2026-12-31'], gaps: ['2026-11-03'], closedDays: 3 }),
+    ['yil hali tugamagan', 'yopilmagan kunlar: 30.12.2026, 31.12.2026', 'varaq raqamlari uzluksiz emas: 03.11.2026']);
+  assert.deepEqual(bookCoverWhy({ yearEnded: true, closedDays: 0 }), ['yopilgan kassa kuni yo‘q']);
+  assert.deepEqual(bookCoverWhy(null), ['yil hali tugamagan', 'yopilgan kassa kuni yo‘q']);
+});
+test('F2.12 verifyLink: verify.html?k=<kalit> — sayt manzili bilan, kalit kodlanadi', () => {
+  assert.equal(verifyLink('0123456789abcdef0123456789abcdef', 'https://misol.test'), 'https://misol.test/verify.html?k=0123456789abcdef0123456789abcdef');
+  assert.equal(verifyLink('a b&c', 'https://misol.test'), 'https://misol.test/verify.html?k=a%20b%26c');
+  assert.equal(verifyLink(null, 'https://misol.test'), 'https://misol.test/verify.html?k=');
 });

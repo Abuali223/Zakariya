@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 20;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 21;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -370,6 +370,8 @@ function draw() {
   if (started && (m.director || m.list2 || m.operator)) acts.push(`<button class="btn ghost2" id="ks-mx" title="Oylik statiya matritsasi (RP-08) — chop etish; buxgalter uchun oylik kassa to‘plami (Excel)">Statiyalar</button>`);
   if (started && (m.director || m.list2) && Number(s.version) >= 15) acts.push(`<button class="btn ghost2" id="ks-fix" title="Qayta tasnif dalolatnomalari (QT): yopilgan kundagi xarajat orderidagi statiya, oluvchi yoki asos xatosini tuzatish — Direktor tasdig‘i bilan">QT${num(s.pending.fixToApprove) && m.director ? ` (${num(s.pending.fixToApprove)})` : ''}</button>`);
   if (started && (m.operator || m.director || m.list2) && Number(s.version) >= 17) acts.push(`<button class="btn ghost2" id="ks-psheet" title="Xodimning o‘quv yili ish haqi to‘lov qaydnomasi (Sh-8 B17): shu xodimning naqd maosh, avans va qaytimlari — imzo uchun, boshqa xodimlar summalarisiz">Qaydnoma</button>`);
+  // F2.12: kassa kitobi — yil muqovasi va varaqlar guvohnomasi (yil oxirida KO-4 1-nusxalari tikiladi; server 21+)
+  if (started && (m.director || m.list2 || m.operator) && Number(s.version) >= 21) acts.push(`<button class="btn ghost2" id="ks-book" title="Kassa kitobi: yil muqovasi va varaqlar guvohnomasi (yil oxirida kunlik KO-4 varaqlarining 1-nusxalari tikiladi)">Kitob</button>`);
   if (started && (m.director || m.list2)) acts.push(`<button class="btn ghost2" id="ks-kpi" title="Haftalik ko‘rsatkichlar (RP-22): o‘z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi, muddati o‘tgan avanslar">KPI</button>`);
   // (tayyorlangan, hali boshlanmagan qayta ishga tushirishda ham — qayta sanash uchun, g4v-2)
   if (ready && (paused || rs) && m.director) acts.push(`<button class="btn gold" id="ks-restart" title="Komissiya sanashi bo‘yicha qayta ishga tushirish qoldig‘i (ishga-tushirish §9)">Qayta ishga tushirish</button>`);
@@ -548,6 +550,7 @@ function bind() {
   on('#ks-ko3', () => openJournal());
   on('#ks-mx', openMatrix);
   on('#ks-kpi', openKpi);
+  on('#ks-book', openBookCover);
   on('#ks-fix', () => openFixList('pending'));
   on('#ks-psheet', () => openPaySheet());
   each('data-psheet', (ref, b) => printPaySheet(ref, Number(b.dataset.psyear) || null));
@@ -1361,6 +1364,62 @@ function saveJson(name, obj) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' }));
   a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
+// F2.12: patta tekshiruv havolasi (QR ichidagi matn) — shu sayt manzili bilan
+export function verifyLink(tok, origin) {
+  const o = origin || (typeof location !== 'undefined' ? location.origin : '');
+  return `${o}/verify.html?k=${encodeURIComponent(String(tok || ''))}`;
+}
+// Kassa kitobi muqovasi to'liq emasligi sabablari (kassa_book_cover javobi bo'yicha; bosmadagi «ҚОРАЛАМА» bilan bir qoida)
+export function bookCoverWhy(r) {
+  r = r || {}; const w = [];
+  if (!r.yearEnded) w.push('yil hali tugamagan');
+  if ((r.openDays || []).length) w.push('yopilmagan kunlar: ' + r.openDays.map(dmy).join(', '));
+  if ((r.gaps || []).length) w.push('varaq raqamlari uzluksiz emas: ' + r.gaps.map(dmy).join(', '));
+  if (!num(r.closedDays)) w.push('yopilgan kassa kuni yo‘q');
+  return w;
+}
+// ---------------------------------------------------------------- kassa kitobi: yil muqovasi va guvohnoma (F2.12)
+//   Yil oxirida kunlik KO-4 varaqlarining 1-nusxalari muqova bilan tikiladi, ip o'tkaziladi va muhrlanadi; guvohnomada varaqlar soni —
+//   rahbar va bosh buxgalter imzosi bilan (server: kassa_book_cover). To'liq bo'lmasa — sabablar ko'rsatiladi, bosmada «ҚОРАЛАМА».
+async function openBookCover() {
+  const st = (ST.ov && ST.ov.state) || {}, today = String(st.today || '');
+  const y0 = +today.slice(0, 4) || new Date().getFullYear();
+  const yStart = +String((st.desk && st.desk.startDay) || '').slice(0, 4) || y0;
+  const years = []; for (let y = y0; y >= Math.max(2020, Math.min(yStart, y0)); y--) years.push(y);
+  const def = (+today.slice(5, 7) <= 2 && years.includes(y0 - 1)) ? y0 - 1 : y0;   // yanvar–fevral: o'tgan yil kitobi tikiladi
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa kitobi: yil muqovasi va guvohnoma</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted">Yil oxirida kunlik KO-4 varaqlarining 1-nusxalari muqova bilan tikiladi, ip o‘tkaziladi va muhrlanadi; guvohnomada varaqlar soni — rahbar va bosh buxgalter imzosi bilan.</div>
+      <div class="grid2" style="margin-top:8px">${lbl('Yil', `<select id="kb-year" style="${FLD}">${years.map(y => `<option value="${y}"${y === def ? ' selected' : ''}>${y}</option>`).join('')}</select>`)}<span></span></div>
+      <div id="kb-sum" style="margin-top:10px"><div class="loading">Yuklanmoqda…</div></div></div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button><button type="button" class="btn gold" id="kb-print" disabled>Muqova va guvohnomani chop etish</button></div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  let cur = null;
+  const load = async () => {
+    const sel = $('#kb-year'), box = $('#kb-sum'); if (!sel || !box) return;
+    const y = +sel.value; cur = null; $('#kb-print').disabled = true; box.innerHTML = '<div class="loading">Yuklanmoqda…</div>';
+    let r; try { r = await call('kassa_book_cover', { p_desk: ST.desk, p_year: y }); }
+    catch (e) { box.innerHTML = `<div class="small" style="color:#B42318">${esc(errText(e))}</div>`; return; }
+    if (!$('#kb-sum') || +$('#kb-year').value !== y) return;   // oyna yopilgan yoki boshqa yil tanlangan
+    cur = r;
+    const why = bookCoverWhy(r), nos = x => x && x.first ? `№ ${x.first} — № ${x.last} (${x.count} ta)` : 'yo‘q';
+    box.innerHTML = `<div class="tablewrap"><table id="kb-tbl"><tbody>
+        <tr><td data-label="">Kassa</td><td data-label=""><b>${esc(r.deskName || r.desk || '')}</b>${r.isTest ? ' ' + chip('sinov', '#5a6b76', '#eef2f5') : ''}</td></tr>
+        <tr><td data-label="">Kunlar</td><td data-label="">${esc(String(num(r.days)))} (yopilgan ${esc(String(num(r.closedDays)))})${r.firstDay ? ` · ${esc(dmy(r.firstDay))} — ${esc(dmy(r.lastDay))}` : ''}</td></tr>
+        <tr><td data-label="">Varaqlar</td><td data-label=""><b id="kb-sheets">${num(r.sheets) ? `№ ${esc(String(r.sheetFrom))} — № ${esc(String(r.sheetTo))} (${esc(String(r.sheets))} ta)` : 'yo‘q'}</b></td></tr>
+        <tr><td data-label="">Kirim orderlari</td><td data-label="">${esc(nos(r.ko1))}</td></tr>
+        <tr><td data-label="">Chiqim orderlari</td><td data-label="">${esc(nos(r.ko2))}</td></tr></tbody></table></div>
+      <div class="small" id="kb-state" style="margin-top:8px;font-weight:600;color:${r.complete ? '#1F9982' : '#B54708'}">${r.complete ? 'Kitob to‘liq — tikishga tayyor ✓' : `Kitob hali to‘liq emas: ${esc(why.join('; '))}. Chop etilsa — «ҚОРАЛАМА» belgisi bilan (tikilmaydi).`}</div>`;
+    $('#kb-print').disabled = false;
+  };
+  $('#kb-year').onchange = load; load();
+  $('#kb-print').onclick = async () => {
+    if (!cur) return; const b = $('#kb-print'); b.disabled = true;
+    try { const [pm, wm] = await Promise.all([C.finMod('fin-print'), C.finMod('fin-words'), loadRefs()]);
+      C.printHTML(pm.coverHtml(cur, printCtx({}, cur.isTest, null), wm)); }
+    catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+    b.disabled = false;
+  };
+}
 // Davr qulfi qamrovi (fin-period.sql): 19-relizdan — hisob-fakturalar, o'quvchi avansi harakatlari, qaytarishlar va oylik vedomost ham
 export function lockScope(ver) {
   return Number(ver || 0) >= 19
@@ -1530,7 +1589,9 @@ async function printDoc(id, back) {
     if (!d || !d.no) { C.toast('Faqat o‘tkazilgan (raqam olgan) hujjat chop etiladi', true); return; }
     // ui-4: boshlang'ich qoldiq / qayta ishga tushirish dalolatnomasida — komissiya a'zolari (server: kassa_doc_get.commission)
     const dd = Array.isArray(got.commission) ? Object.assign({}, d, { commission: got.commission }) : d;
-    const go = async reissue => { const mk = await call('kassa_print_mark', { p_kind: 'doc', p_id: id, p_reissue: !!reissue }); C.printHTML(pm.docHtml(dd, printCtx(got.names, got.isTest, mk), wm)); };
+    // F2.12: pattada QR — to'lovchi pul maktab kassa hisobiga kirganini o'zi tekshiradi (verify.html?k=…; server — verify_patta, ismsiz)
+    const qr = (d.form === 'KO1' && d.vtok && C.qrDataUrl) ? await Promise.resolve(C.qrDataUrl(verifyLink(d.vtok))).catch(() => '') : '';
+    const go = async reissue => { const mk = await call('kassa_print_mark', { p_kind: 'doc', p_id: id, p_reissue: !!reissue }); C.printHTML(pm.docHtml(dd, Object.assign(printCtx(got.names, got.isTest, mk), { qr }), wm)); };
     if (printTaker() && printPrior(d) > 0) askReprint(`${d.form === 'KO1' ? 'Kirim orderi' : d.form === 'KO2' ? 'Chiqim orderi' : 'Dalolatnoma'} № ${d.no}`, printPrior(d), go, back);
     else await go(false);
   } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }

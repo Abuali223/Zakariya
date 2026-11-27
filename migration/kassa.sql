@@ -406,10 +406,22 @@ create unique index if not exists cash_doc_fixes_number on public.cash_doc_fixes
 create index if not exists cash_doc_fixes_doc_idx on public.cash_doc_fixes ("docId", year desc, no desc) where status = 'approved';
 create index if not exists cash_doc_fixes_pending_idx on public.cash_doc_fixes (desk) where status = 'pending';
 
+-- ---------- Patta tekshiruv kaliti (F2.12, reliz 21) ----------
+--   Kirim orderining to'lovchi qismidagi (patta) QR — verify.html?k=<kalit>: to'lovchi pul maktab kassa hisobiga kirganini o'zi tekshiradi.
+--   Kalit — 32 ta 0-9/a-f (gen_random_uuid dan, 122 bit tasodif — taxmin qilib topilmaydi); KO-1 raqam olganda (o'tkazilganda) yaratiladi
+--   (kassa-docs.sql: app.kassa_vtok). Alohida jadval: cash_docs o'zgarmas (kassa_doc_guard), kun izi (kassa_day_hash) unga bog'liq emas.
+--   O'qish — boshqa kassa jadvallari kabi (RLS: kassa o'quvchilari; kalit hujjat ma'lumoti bilan ham keladi — app.kassa_doc_json, patta
+--   bosmasi uchun); mehmon (anon) — faqat public.verify_patta orqali (ismsiz ma'lumot). Yozish — faqat trigger (security definer).
+create table if not exists public.cash_doc_verify (
+  "docId"     text primary key references public.cash_docs(id) on delete cascade,
+  token       text not null unique check (token ~ '^[0-9a-f]{32}$'),
+  "createdAt" timestamptz not null default now()
+);
+
 -- ---------- RLS: faqat o'qish; yozish — kassa funksiyalari ----------
 do $$ declare t text; begin
   foreach t in array array['cash_days', 'cash_docs', 'cash_doc_lines', 'payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots', 'cash_prints',
-                           'cash_handovers', 'cash_doc_fixes'] loop
+                           'cash_handovers', 'cash_doc_fixes', 'cash_doc_verify'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on table public.%I from public, anon, authenticated', t);
     execute format('grant select on table public.%I to authenticated', t);
