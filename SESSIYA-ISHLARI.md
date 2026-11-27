@@ -3599,6 +3599,47 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   oylar fakturalari tuzatilmaydi — farq joriy oyda hujjatlanadi (masalan qaytarish yoki avans); zarurat bo'lsa Direktor «Davr»da
   davrni sababi bilan qayta ochadi va amaldan keyin qayta yopadi. Kassa moduli hali `--dev` — jonli zanjirga o'tkazish bilan chiqadi.
 
+## 96) F2.4 — maosh hisoblash qatori `expenses.kind` bilan va F2.11 — o'quvchi avansini naqdsiz qaytarish (reliz 20) — 2026-11-27
+
+- **Egasi (2026-11-27):** «Qolgan bandlarni boshla» — 2-bosqichning qolgan bandlari (F2.3 — egasi qarori bilan keyinga surilgan).
+  Navbat: F2.4 + F2.11 (reliz 20), keyin F2.12, F2.7, F2.5, F2.6, F2.9 + F2.10.
+- **F2.4 qarorlari:** maosh hisoblash qatori (`payroll__YYYY-MM`, «💼 Oylik maoshni yozish») naqd ko'rinishlardan endi ID filtri
+  o'rniga `expenses.kind = 'accrual'` bilan ajratiladi. Ustun oddiy, GENERATED emas: PostgreSQL BEFORE triggerida GENERATED ustun
+  NULL ko'rinadi va butun qatorni solishtiradigan qo'riqchilarni (`to_jsonb(new)` / `to_jsonb(old)`) buzardi — qiymatni birinchi
+  ishlaydigan trigger `trg_fin_exp_0kind` ID dan yozadi (sahifa yuborgan qiymat e'tiborga olinmaydi); eski yozuvlar zanjirda
+  to'ldiriladi. Cheklov `expenses_accrual_chk`: hisoblash qatorida usul, kassa va xarajat hujjati havolasi bo'lmaydi (eski zid yozuv
+  bo'lsa — cheklov NOT VALID qoladi va zanjir ID larni ogohlantiradi). O'quvchi kodlar `kind` bo'yicha: `kassa_cash_guard` (6 shart),
+  `kassa_cash_rows`, solishtiruv P4, `fin_exp_legacy_check`, «Buxgalteriya»dagi «Maosh hisobi» belgisi (`expAccrual`; eski serverda —
+  ID bo'yicha), Google Sheets «Xarajatlar» varag'ida «To'lov usuli» — «Hisoblash (naqd emas)» (ustun yo'q zanjirda — ID bo'yicha).
+- **F2.11 qarorlari:** `fin_refund_credit(p)` (kassa-links.sql) — faqat Direktor; usul bank o'tkazmasi yoki karta (terminalda
+  qaytarish); kassa ishga tushmagan bo'lsa ham (modul o'rnatilgan, server 20+). Summa joriy avansgacha; sabab (3+ belgi) va pul kimga
+  qaytarilishi (to'liq F.I.Sh., 5+ belgi) majburiy. Bitta tranzaksiyada: o'quvchi navbati (L1, to'lov va qaytarish bilan bir xil),
+  avans kamayadi, avans harakati (`credit_ledger`: reason `refund`, provider — usul), qaytarishlar jurnali (`refunds`: target `credit`,
+  usul, yangi ustun `payee`). Oyna kaliti (`applied_payments` 'refund_credit:<kalit>'): javob yo'qolib qayta bosilsa — «avval
+  yozilgan», boshqa ma'lumot bilan — rad (`ref_mismatch`); o'sha oynadan naqd so'rov yuborilgan bo'lsa — rad (via cash), naqd so'rov
+  esa naqdsiz qaytarish kalitini ko'rsa rad etadi (`kassa_refund_request`, live-1b). Pul berilmagan naqd avans so'rovi bilan jami
+  avansdan oshsa — rad (`kassa:refund_pending`). Kassa hujjati yo'q — pul bank orqali qaytariladi, provodka Dt 6310 Kt 5110 bank
+  ko'chirmasi bo'yicha.
+- **Sahifa:** «📋» tarix → «↩ Avansni qaytarish» (kassa ishga tushgan yoki server 20+): usul tanlovi (naqd — kassa ishga tushgan
+  bo'lsa; bank / karta — server 20+), naqdsizda izoh (avans darhol kamayadi, kassa hujjati yo'q, Dt 6310 Kt 5110), «Ariza sanasi»
+  faqat naqd so'rovda; birinchi yuborishdan keyin usul qulflanadi; avans tarixida «Avans qaytarildi (naqdsiz)» yorlig'i.
+- **Topilgan va tuzatilgan:** to'liq regressiya `test-fin-rights` V6 da yangi `refunds.payee` ustunini ushladi (buxgalter ko'rinishi
+  uchun sinflanmagan): oluvchi F.I.Sh. — shaxsiy ma'lumot, `refunds_acc` ga qo'shilmaydi (FD-28), sinovda istisno sifatida qayd etildi.
+- **Reliz 20:** `fin-version.sql`, `SERVER_VER`, `kassa-checks.sql` (ommaviy funksiyalar 57, ichki 127, himoya triggerlari 34, 8-band —
+  `trg_fin_exp_0kind`, barmoq izlari 375), `test-kassa-checks` (A0).
+- **Sinovlar:** `test-kassa-links` +E3f–E3h (kind: hosil qilinishi, mijoz qiymati e'tiborsiz, cheklov 23514, «payroll__x» — oddiy
+  xarajat, P4 va naqd qatorlar) va RN0–RN4 (`fin_refund_credit`) — 171; `test-fin-exp` (urug'da kind) — 53; `test-sheets-sync` +X1 —
+  dev 59, jonli 57; `test-fin-rights` — 125; brauzer: `k15` (+4 — usul tanlovi, javob yo'qolgan bank qaytarishi, takror bosish, tarix),
+  `k19` urug'i.
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 69/69, jonli zanjir va qayta zanjir, tugun va server sinovlari) —
+  yagona qizil `test-fin-rights` V6 edi (yuqorida); tuzatilgach maqsadli qayta o'tish — `test-fin-rights` 125, `test-sheets-sync` dev
+  59 / jonli 57, `test-fin-exp` 53, `test-kassa-links` 171, `test-kassa-checks` 55, Sheets tugun sinovi 60 — yashil. Brauzer to'plami —
+  29 o'tish, 739 tekshiruv (kassa 597) — hammasi o'tdi (`k15` ning yangi tarix tekshiruvi to'liq o'tishda sinov kutilmasi tufayli
+  yiqilgan — server izohi oddiy apostrof bilan; kutilma tuzatilgach `k15` yakuniy kod bilan alohida: 33/33).
+- **Egasi va buxgalter uchun:** ketgan o'quvchining avansini endi bank yoki karta orqali ham qaytarish mumkin («📋» → «↩ Avansni
+  qaytarish» → usul). Naqdsiz qaytarishda pulni bank orqali o'tkazish — alohida (tizim faqat hisobni yuritadi); bank ko'chirmasi
+  buxgalterga. Kassa moduli hali `--dev` — jonli zanjirga o'tkazish bilan chiqadi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

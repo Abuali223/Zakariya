@@ -75,8 +75,13 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          o'zgarmaydi), qaytarishlar (app.fin_lock_refunds — pul maydonlari), oylik vedomost (app.fin_lock_payroll — hisoblanish kuni
 --          oyning oxirgi kuni); app.fin_lock_hit; triggerlar trg_fin_zlock (invoices, credit_ledger, refunds, payroll_runs, payroll_lines);
 --          kassa_month_check — tasdiqlanmagan vedomost ogohlantirishi (payroll.approvalFrom).
+--     20 — 2-bosqich F2.4 va F2.11: expenses.kind ('accrual' — oylik maoshni hisoblash qatori «payroll__YYYY-MM», 'expense' — qolgani;
+--          faqat id dan — trigger trg_fin_exp_0kind / app.fin_exp_kind, mijoz qiymati e'tiborsiz), expenses_accrual_chk (hisoblash qatorida
+--          usul va hujjat yo'q); naqd ko'rinishlar — kind bo'yicha (kassa_cash_guard, kassa_cash_rows, kassa_reconcile_range P4,
+--          fin_exp_legacy_check); fin_refund_credit — o'quvchi avansini naqdsiz (bank / karta) qaytarish (Direktor; idempotent;
+--          kutilayotgan naqd so'rovlar bilan), refunds.payee; kassa_refund_request — shu oyna kaliti bilan naqdsiz qaytarish bo'lsa rad.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 19 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 20 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

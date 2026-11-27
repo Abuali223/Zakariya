@@ -184,7 +184,9 @@ select zz.chk('V4 payments_acc.raw — faqat ruxsat etilgan kalitlar (to''lov ku
 select zz.chk('V5 refunds_acc: byEmail yo''q; to''lov qaytarishida studentName (to''lovchi matni) — bo''sh',
   coalesce(zz.cols('refunds_acc'), '') || ' | ' || zz.as('U_ACC', $q$select string_agg(id || '=' || coalesce("studentName", '∅'), ',' order by id) from public.refunds_acc$q$),
   '^id,target,targetId,studentId,studentName,amount,reason,month,createdAt,byUid,method,cashDocId \| r1=Sinov A,r2=∅$');
-select zz.chk('V6 refunds: sinflanmagan ustun yo''q', zz.unclassified('refunds', 'refunds_acc', array['byEmail']), '^$');
+-- "payee" (reliz 20, F2.11 — naqdsiz avans qaytarishida pul kimga qaytarilgani, to'liq F.I.Sh.) — shaxsiy ma'lumot: buxgalter ko'rinishiga
+--   qo'shilmaydi (FD-28; buxgalter bank ko'chirmasidan ko'radi, tizimda — o'quvchi ID, summa, usul).
+select zz.chk('V6 refunds: sinflanmagan ustun yo''q', zz.unclassified('refunds', 'refunds_acc', array['byEmail','payee']), '^$');
 select zz.chk('V7 salary_payments_acc: byEmail yo''q, qator ko''rinadi',
   (zz.cols('salary_payments_acc') !~ 'byEmail')::text || '/' || zz.cnt('U_ACC', 'salary_payments_acc') || '/' || zz.cnt('U_ACC', 'salary_payments'), '^true/1/0$');
 select zz.chk('V8 salary_payments: sinflanmagan ustun yo''q', zz.unclassified('salary_payments', 'salary_payments_acc', array['byEmail']), '^$');

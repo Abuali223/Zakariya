@@ -1561,7 +1561,12 @@ function expReg(){ return !!KASSA.on && Number(KASSA.ver)>=13; }
 //   Direktor, Moliya menejeri, buxgalter (server: fin_cp_save — app.is_admin() / app.fin_list2(); buxgalter «Buxgalteriya»da faqat ko'rsa ham
 //   kontragent kartasini yuritadi — fin_counterparty_save bilan bir xil huquq).
 function cpReg(){ return !!KASSA.on && Number(KASSA.ver)>=14 && (!!SESSION.isAdmin || ['finance_mgr','accountant'].includes(SESSION.role)); }
+// F2.11: o'quvchi avansini naqdsiz (bank / karta) qaytarish — server relizi 20+ (kassa-links.sql: fin_refund_credit; kassa ishga tushmagan bo'lsa ham)
+function credRefundNc(){ return !!KASSA.on && Number(KASSA.ver)>=20; }
 const EXP_MCHIP={ bank:'Bank', card:'Karta', cash:'Naqd' };
+// F2.4: oylik maoshni hisoblash qatori (pul harakati emas) — server ustuni expenses.kind = 'accrual'; ustun yo'q bazada (kassa modulisiz) —
+//   xuddi shu qoida id dan («payroll__YYYY-MM»).
+const expAccrual=e=>(e&&e.kind)?e.kind==='accrual':/^payroll__\d{4}-(0[1-9]|1[0-2])$/.test(String((e&&e._id)||''));
 const KASSA_HOLD_TXT='<b>Kassa to‘xtatilgan</b> (yoki qayta ishga tushirish kunini kutmoqda). Naqd — faqat to‘xtatilgan davr sanasi bilan, kassa orderisiz (oxirgi kassa kuni va undan oldingi sana bilan naqd yozilmaydi); bank / karta orqali — istalgan sana bilan.';
 // Davr qulfi (moliya rejasi F1.16): Direktor yopgan sanagacha pul yozuvlari kiritilmaydi — shakllarda eng erta sana = qulfdan
 //   keyingi kun ('' — qulf yo'q yoki kassa moduli yo'q). Server ham rad etadi (42501) — bu faqat qulaylik uchun.
@@ -10564,7 +10569,7 @@ async function renderAccounting(){
         return `<span class="chip" title="Xarajat hujjati: ${esc(EXP_MCHIP[m]||m||'')}${d&&d.docNo?' № '+esc(d.docNo):''}">${esc(EXP_MCHIP[m]||m||'Hujjat')}${d&&d.docNo?' № '+esc(d.docNo):''}</span>`
           +`<button class="btn sm ghost2" data-xdoc="${esc(e.expDocId)}" title="Hujjatni ko‘rish (kontragent, №, ilova, statiyalar, kim kiritgan)">Hujjat</button>`
           +(accRO()?'':rec+`<button class="btn sm" data-xfixd="${esc(e.expDocId)}" title="Eski hujjat bekor qilinadi, o‘rniga yangisi yoziladi">Tuzatish</button><button class="btn sm danger" data-xvoidd="${esc(e.expDocId)}">Bekor</button>`); }
-      if(String(e._id||'').startsWith('payroll__')) return accRO()?'':`<span class="chip" title="«💼 Oylik maoshni yozish» qatori — tugma qayta bosilsa yangilanadi">Maosh hisobi</span><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button>`;
+      if(expAccrual(e)) return accRO()?'':`<span class="chip" title="«💼 Oylik maoshni yozish» qatori — hisoblash (pul harakati emas: kassa va naqd hisobotlarida yo‘q); tugma qayta bosilsa yangilanadi">Maosh hisobi</span><button class="btn sm danger" data-edel="${esc(e._id)}">O‘chir</button>`;
       return accRO()?'':rec+`<button class="btn sm" data-xfixr="${esc(e._id)}" title="Eski yozuv: hujjat bilan (statiya, usul, kontragent) qayta yoziladi">Tuzatish</button><button class="btn sm danger" data-xvoidr="${esc(e._id)}">Bekor</button>`;
     };
     const trs=rows.map(e=>{ const dd=String(e.date||'').slice(8,10), mm=String(e.date||'').slice(5,7);
@@ -11350,7 +11355,7 @@ async function openPayHistory(sid, name){
   invs.sort((a,b)=>String(a.month||'').localeCompare(String(b.month||'')));
   pays.sort((a,b)=>String(pDay(b)).localeCompare(String(pDay(a))));
   ledg.sort((a,b)=>String(dstr(b.at)).localeCompare(String(dstr(a.at))));
-  const reasonLbl={overpay:'Ortiqcha to‘lov → avans',applied:'Avans qo‘llandi',recompute:'Qayta hisoblash ortiqchasi',reversed:'Qaytarish (reversal)',manual:'Qo‘lda'};
+  const reasonLbl={overpay:'Ortiqcha to‘lov → avans',applied:'Avans qo‘llandi',recompute:'Qayta hisoblash ortiqchasi',reversed:'Qaytarish (reversal)',manual:'Qo‘lda',refund:'Avans qaytarildi (naqdsiz)'};
   // Fakturaga to'langan — boshqa joylardagi qoida (paidAmt, A6-04): holati 'paid' — to'liq summa ("paidAmount" bo'sh eski import
   //   yozuvida ham; avval «To‘langan 0» ko'rinardi), aks holda "paidAmount". Jadval ustuni ham, quyidagi diagnostika ham shu bilan.
   const invPaidOf=i=>(i.status==='paid')?(Number(i.amount)||0):(Number(i.paidAmount)||0);
@@ -11369,7 +11374,7 @@ async function openPayHistory(sid, name){
   const invPaid=invs.reduce((s,i)=>s+invPaidOf(i),0);
   const warn = (paysSum>0 && credit>paysSum+0.5 && invPaid<0.5) ? `<div class="small" style="margin-bottom:8px;color:#B42318;background:#FDECEC;border-radius:8px;padding:8px 10px">⚠️ Onlayn to‘lovlar jami <b>${fmtSom(paysSum)}</b>, lekin avans <b>${fmtSom(credit)}</b> — hisob-fakturalarga qo‘llanmagan. Avans to‘lovdan katta bo‘lsa, bitta to‘lov takror (qayta urinish) hisoblangan bo‘lishi mumkin. ${SESSION.isAdmin?'To‘g‘ri summani «✏️ Avansni tuzatish» bilan qo‘ying.':'Direktorga xabar bering (tuzatish — Direktorda).'}</div>` : '';
   body.innerHTML=`
-    <div class="small muted" style="margin-bottom:8px"><b>${esc(name||sid)}</b> · ${esc(sid)} · joriy avans: <b style="color:#0891B2">${fmtSom(credit)}</b>${SESSION.isAdmin?` <button class="btn sm ghost2" id="ph-fix" style="margin-left:8px">✏️ Avansni tuzatish</button>`:''}${(SESSION.isAdmin && KASSA.live && credit>0)?` <button class="btn sm ghost2" id="ph-cref" style="margin-left:6px" title="Masalan, ketgan o‘quvchining oldindan to‘lagan puli — kassadan chiqim orderi bilan">↩ Avansni naqd qaytarish</button>`:''}</div>
+    <div class="small muted" style="margin-bottom:8px"><b>${esc(name||sid)}</b> · ${esc(sid)} · joriy avans: <b style="color:#0891B2">${fmtSom(credit)}</b>${SESSION.isAdmin?` <button class="btn sm ghost2" id="ph-fix" style="margin-left:8px">✏️ Avansni tuzatish</button>`:''}${(SESSION.isAdmin && (KASSA.live || credRefundNc()) && credit>0)?` <button class="btn sm ghost2" id="ph-cref" style="margin-left:6px" title="Masalan, ketgan o‘quvchining oldindan to‘lagan puli — naqd (kassadan chiqim orderi bilan) yoki bank / karta orqali">↩ Avansni qaytarish</button>`:''}</div>
     ${warn}
     <h4 style="margin:10px 0 4px;font-size:14px">Hisob-fakturalar</h4><div class="tablewrap"><table><thead><tr><th>Oy</th><th>Summa</th><th>To‘langan</th><th>Usul</th><th>Sana</th><th>Holat</th></tr></thead><tbody>${invRows}</tbody></table></div>
     <h4 style="margin:14px 0 4px;font-size:14px">To‘lov yozuvlari (Click/Uzum/Naqd) — kim to‘lagan${SESSION.isAdmin?' <span class="small muted" style="font-weight:400">· takror/xato yozuvni 🚫 bilan bekor qiling</span>':''}</h4><div class="tablewrap"><table><thead><tr><th>Sana</th><th>Usul</th><th>To‘lovchi</th><th>Summa</th><th>Holat</th>${SESSION.isAdmin?'<th></th>':''}</tr></thead><tbody>${payRows}</tbody></table></div>
@@ -13664,7 +13669,7 @@ async function openRecordPayment(students, reload, pre){
 async function openRefund(ctx, reload){
   if(!SESSION.isAdmin){ toast('Faqat direktor to‘lovni qaytara oladi',true); return; }
   const isCred = ctx.type==='credit';
-  if(isCred && !KASSA.live){ toast('O‘quvchi avansini naqd qaytarish — faqat kassa ishga tushgach',true); return; }
+  if(isCred && !KASSA.live && !credRefundNc()){ toast('O‘quvchi avansini naqd qaytarish — faqat kassa ishga tushgach',true); return; }
   // Direktor PIN (Sozlamalar) — Google bilan kirgan direktorда ham ishlaydi (parol o'rniga).
   let refundPin=''; try{ const s=await getDoc(doc(db,'config','security')); refundPin=String((s.exists()?s.data():{}).refundPin||''); }catch(e){}
   const credSid = isCred ? String(ctx.sid||'') : String((ctx.type==='invoice' && ctx.invoice && ctx.invoice.studentId)||'');
@@ -13683,20 +13688,31 @@ async function openRefund(ctx, reload){
   const cashBlock=`<div id="rf-cash"><div class="grid2" style="margin-top:8px"><label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Pul kimga beriladi (to‘liq F.I.Sh.)<input id="rf-payee" type="text" maxlength="200" style="${fld}"></label>
         <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Ariza sanasi<input id="rf-reqdate" type="date" value="${esc(tkDay(new Date()))}" style="${fld}"></label></div>
         <div class="small muted" style="margin-top:6px">Tasdiqlagach so‘rov «Kassa»da paydo bo‘ladi; kassir pulni chiqim orderi bilan beradi. ${isCred?'Avans':'Hisob-faktura va avans'} <b>pul berilgan kuni</b> o‘zgaradi.</div></div>`;
-  $('#modal').innerHTML=`<div class="modal-h"><h3>↩ ${isCred?'O‘quvchi avansini naqd qaytarish':'To‘lovni qaytarish'}</h3><button class="x" id="m-x">×</button></div>
+  // F2.11: avans — usul tanlovi (naqd — kassa ishga tushgan bo'lsa; bank / karta — server 20+). Pul kimga — har usulda (to'liq F.I.Sh.)
+  const credOpts = isCred ? (KASSA.live?'<option value="cash">Naqd — kassadan (chiqim orderi bilan)</option>':'')
+    + (credRefundNc()?'<option value="bank">Bank o‘tkazmasi (hisob raqamiga)</option><option value="card">Karta orqali (terminalda qaytarish)</option>':'') : '';
+  const credBlock = `<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Qaytarish usuli<select id="rf-cmethod" style="${fld};background:#fff">${credOpts}</select></label>
+      <div class="grid2" style="margin-top:8px"><label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Pul kimga qaytariladi (to‘liq F.I.Sh.)<input id="rf-payee" type="text" maxlength="200" style="${fld}"></label>
+        <label class="small" id="rf-reqbox" style="font-weight:700;display:flex;flex-direction:column;gap:6px">Ariza sanasi<input id="rf-reqdate" type="date" value="${esc(tkDay(new Date()))}" style="${fld}"></label></div>
+      <div class="small muted" id="rf-cnote" style="margin-top:6px"></div>`;
+  $('#modal').innerHTML=`<div class="modal-h"><h3>↩ ${isCred?'O‘quvchi avansini qaytarish':'To‘lovni qaytarish'}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <div class="small" style="font-weight:700;background:#fdecec;color:#B42318;border-radius:10px;padding:10px 12px">${esc(who)} — ${isCred?`joriy avans: <b>${esc(fmtSom(studCredit))}</b>, qaytariladigan: <b>${maxStr}</b> so‘m gacha`:`qaytariladigan: <b>${maxStr}</b> so‘m gacha`}</div>
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:10px">Summa (so‘m)<input id="rf-amt" type="text" inputmode="numeric" value="${esc(maxStr)}" style="${fld}" ${(isInv||isCred)?'':'readonly'}></label>${(isInv||isCred)?'':`<div class="small muted" style="margin-top:4px">Biriktirilmagan to‘lov faqat TO‘LIQ qaytariladi. Qisman bo‘lsa — avval «Biriktirish» qiling (ortiqchasi avansga o‘tadi), so‘ng avansdan qaytaring.</div>`}
       <label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Sabab (majburiy)<input id="rf-reason" type="text" placeholder="${isCred?'masalan: o‘quvchi maktabdan ketdi':'masalan: adashib kiritilgan'}" style="${fld}"></label>
-      ${isCred?`<div class="small muted" style="margin-top:8px">Faqat naqd — kassadan (chiqim orderi bilan). Naqdsiz avans qaytarish hozircha yo‘q.</div>
-      ${cashBlock}`:KASSA.live?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Qaytarish usuli<select id="rf-method" style="${fld};background:#fff"><option value="cash">Naqd — kassadan (chiqim orderi bilan)</option><option value="bank">Naqdsiz (bank / karta orqali — asl kanal)</option></select></label>
-      ${cashBlock}${(isInv && studCredit>0)?`<div id="rf-credopt" class="small" style="margin-top:8px">Fakturaga tegmay faqat avansni qaytarish kerakmi? <button type="button" class="btn sm ghost2" id="rf-cred">↩ O‘quvchi avansini naqd qaytarish (${esc(fmtSom(studCredit))})</button></div>`:''}`:''}
+      ${isCred?credBlock:KASSA.live?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Qaytarish usuli<select id="rf-method" style="${fld};background:#fff"><option value="cash">Naqd — kassadan (chiqim orderi bilan)</option><option value="bank">Naqdsiz (bank / karta orqali — asl kanal)</option></select></label>
+      ${cashBlock}${(isInv && studCredit>0)?`<div id="rf-credopt" class="small" style="margin-top:8px">Fakturaga tegmay faqat avansni qaytarish kerakmi? <button type="button" class="btn sm ghost2" id="rf-cred">↩ O‘quvchi avansini qaytarish (${esc(fmtSom(studCredit))})</button></div>`:''}`:''}
       ${refundPin?`<label class="small" style="font-weight:700;display:flex;flex-direction:column;gap:6px;margin-top:8px">Direktor PIN kodi<input id="rf-pass" type="password" autocomplete="off" placeholder="tasdiqlash uchun" style="${fld}"></label>`:`<div class="small" style="margin-top:8px;color:#B45309">ℹ️ Refund PIN o‘rnatilmagan — Sozlamalar → «🔐 Qaytarish PIN»da o‘rnating (himoya uchun).</div>`}
       ${(studCredit>0 && !isCred)?`<label class="small" style="margin-top:8px;color:#B45309;background:#FEF3E2;border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="rf-clawback" style="margin-top:2px"><span id="rf-cbtxt">${cbOld}</span></label>`:''}
-      <div class="small muted" style="margin-top:8px">${isCred?'O‘quvchi avansi pul berilganda kamayadi — avans harakati va qaytarishlar jurnaliga (refunds) yoziladi.':`${isInv?'Hisob-faktura to‘langan summasidan ayiriladi — qarz qayta paydo bo‘ladi.':'Biriktirilmagan to‘lov «qaytarilgan» deb belgilanadi.'} Amal jurnalga (refunds) yoziladi.`}</div>
+      <div class="small muted" style="margin-top:8px">${isCred?'Avans harakati va qaytarishlar jurnaliga (refunds) yoziladi.':`${isInv?'Hisob-faktura to‘langan summasidan ayiriladi — qarz qayta paydo bo‘ladi.':'Biriktirilmagan to‘lov «qaytarilgan» deb belgilanadi.'} Amal jurnalga (refunds) yoziladi.`}</div>
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn danger" id="rf-do">${isCred?'Tasdiqlash (kassadan beriladi)':'Qaytarish'}</button></div>`;
   openModal(); $('#m-x').onclick=closeModal; $('#m-cancel').onclick=closeModal;
+  { const cm=$('#rf-cmethod'); if(cm){ const upd=()=>{ const c=cm.value==='cash';
+      $('#rf-reqbox').style.display=c?'flex':'none';   // ariza sanasi — naqd so'rovga (KO-2 asosi); naqdsiz qaytarish darhol yoziladi
+      $('#rf-cnote').innerHTML=c?'Tasdiqlagach so‘rov «Kassa»da paydo bo‘ladi; kassir pulni chiqim orderi bilan beradi. Avans <b>pul berilgan kuni</b> kamayadi.'
+        :`Avans <b>darhol</b> kamayadi (kassa hujjati yo‘q); pulni ${cm.value==='bank'?'bank o‘tkazmasi bilan ota-onaning hisob raqamiga':'terminal orqali to‘lov qilingan kartaga'} qaytaring — bank ko‘chirmasi buxgalterga (provodka Dt 6310 Kt 5110).`;
+      $('#rf-do').textContent=c?'Tasdiqlash (kassadan beriladi)':'Qaytarish'; }; cm.addEventListener('change', upd); upd(); } }
   { const rm=$('#rf-method'); if(rm){ const upd=()=>{ const c=rm.value==='cash'; $('#rf-cash').style.display=c?'':'none'; $('#rf-do').textContent=c?'Tasdiqlash (kassadan beriladi)':'Qaytarish';
       const co=$('#rf-credopt'); if(co) co.style.display=c?'':'none'; const ct=$('#rf-cbtxt'); if(ct) ct.innerHTML=c?cbCash:cbOld; }; rm.addEventListener('change', upd); upd(); } }
   { const cb=$('#rf-cred'); if(cb) cb.onclick=()=>openRefund({ type:'credit', sid:credSid, name:ctx.name }, reload); }
@@ -13711,14 +13727,16 @@ async function openRefund(ctx, reload){
     if(!reason){ toast('Sababni yozing',true); return; }
     if(refundPin && pass!==refundPin){ toast('PIN noto‘g‘ri',true); return; }
     // Kassa ishga tushgan va naqd: Direktor TASDIQLAYDI (so'rov), pulni kassir chiqim orderi bilan beradi — balans o'sha paytda o'zgaradi.
-    const viaKassa = isCred || (KASSA.live && $('#rf-method') && $('#rf-method').value==='cash');
-    const payee = viaKassa ? ($('#rf-payee').value||'').trim() : '';
-    if(viaKassa && payee.length<5){ toast('Pul kimga berilishini to‘liq yozing (F.I.Sh.)',true); return; }
+    const cMethod = isCred ? (($('#rf-cmethod')||{}).value||'cash') : '';
+    const viaKassa = isCred ? cMethod==='cash' : (KASSA.live && $('#rf-method') && $('#rf-method').value==='cash');
+    const payee = (viaKassa || isCred) ? ($('#rf-payee').value||'').trim() : '';
+    if((viaKassa || isCred) && payee.length<5){ toast('Pul kimga berilishini to‘liq yozing (F.I.Sh.)',true); return; }
     const cbEl=$('#rf-clawback');
     let claw=!!(cbEl && cbEl.checked && studCredit>0);
     // avans ham naqd beriladi: jami summani server hisoblaydigan avans bilan ko'rsatamiz (oyna ochilgandan keyin avans o'zgargan bo'lishi mumkin)
     if(viaKassa && claw){ studCredit=await readCredit(); claw=studCredit>0; }
-    const ask = isCred ? `O‘quvchi avansidan ${fmtSom(amount)} naqd qaytarish tasdiqlansinmi?\nKimga: ${payee}\nSabab: ${reason}\n\nPulni kassir «Kassa» bo‘limidan beradi; avans pul berilgan kuni kamayadi.`
+    const ask = (isCred && !viaKassa) ? `O‘quvchi avansidan ${fmtSom(amount)} ${cMethod==='bank'?'bank o‘tkazmasi':'karta'} orqali qaytarilsinmi?\nKimga: ${payee}\nSabab: ${reason}\n\nAvans darhol kamayadi (kassa hujjati yo‘q); pulni ${cMethod==='bank'?'bank orqali':'terminal orqali'} qaytaring.`
+      : isCred ? `O‘quvchi avansidan ${fmtSom(amount)} naqd qaytarish tasdiqlansinmi?\nKimga: ${payee}\nSabab: ${reason}\n\nPulni kassir «Kassa» bo‘limidan beradi; avans pul berilgan kuni kamayadi.`
       : (viaKassa && claw) ? `Qaytarish ${fmtSom(amount)} + avans ${fmtSom(studCredit)} = jami ${fmtSom(amount+studCredit)} naqd beriladi.\nTasdiqlansinmi?\nKimga: ${payee}\nSabab: ${reason}\n\nPulni kassir «Kassa» bo‘limidan bitta chiqim orderi bilan beradi; avans 0 ga tushadi.`
       : viaKassa ? `${fmtSom(amount)} naqd qaytarish tasdiqlansinmi?\nKimga: ${payee}\nSabab: ${reason}\n\nPulni kassir «Kassa» bo‘limidan beradi.` : `${fmtSom(amount)} qaytarilsinmi?\nSabab: ${reason}`;
     if(!confirm(ask)) return;   // fmtSom «so‘m»ni o'zi qo'shadi
@@ -13728,7 +13746,15 @@ async function openRefund(ctx, reload){
     //   bo'lishi mumkin; shu oynada boshqa usulga o'tib ikkinchi marta qaytarilmasin (server ham rad etadi: kassa:ref_mismatch /
     //   kassa:refund_pending). Boshqa usul — oynani qayta ochib. Summa va «avans ham» qulflanmaydi: o'zgartirib qayta yuborilsa server
     //   rad etadi (ref_mismatch) va birinchi yozilganini qaytaradi.
-    { const rm=$('#rf-method'); if(rm) rm.disabled=true; }
+    { const rm=$('#rf-method'); if(rm) rm.disabled=true; const cm=$('#rf-cmethod'); if(cm) cm.disabled=true; }
+    if(isCred && !viaKassa){   // F2.11: avansni naqdsiz qaytarish — darhol (server: fin_refund_credit; o'sha oyna kaliti bilan idempotent)
+      try{
+        const d=await rpc('fin_refund_credit', { p:{ sid:credSid, amount, method:cMethod, reason, payee, clientRef:rfRef } });
+        if(d && d.ok===false){ toast(d.reason==='ref_mismatch'?(d.via==='cash'?'Bu oynadan naqd qaytarish so‘rovi allaqachon yuborilgan — «Kassa»da tekshiring':'Bu oynadan boshqa ma’lumot bilan qaytarish allaqachon yozilgan — oynani yopib, tekshiring'):'Qaytarib bo‘lmadi',true); closeModal(); if(reload) reload(); return; }
+        toast(`${(d&&d.dup)?'Qaytarish avval yozilgan ✓':'Avans qaytarildi ✓'} — ${fmtSom((d&&d.amount)||amount)} (${cMethod==='bank'?'bank o‘tkazmasi':'karta'}); pulni ${cMethod==='bank'?'bank orqali':'terminalda'} qaytaring`); closeModal(); if(reload) reload();
+      }catch(e){ busy=false; btn.disabled=false; btn.textContent='Qaytarish'; toast('Xatolik: '+((e&&(e.message||e.code))||''),true); }
+      return;
+    }
     if(viaKassa){
       try{
         const d=await rpc('kassa_refund_request', { p:{ target:isCred?'credit':(isInv?'invoice':'payment'), id:isCred?credSid:String(isInv?(ctx.invoice._id||''):(ctx.payment._id||'')), amount, reason,

@@ -31,7 +31,8 @@ do $iqror_guard$ begin raise exception 'iqror: fin-exp.sql ALOHIDA ishga tushiri
 --     kassa ishga tushgach faqat kassa ishlamagan kun sanasi bilan va faqat Direktor; kassa to'xtatilganda — to'xtatilgan davr sanasi bilan).
 --   Himoya: hujjatga bog'langan «Buxgalteriya» qatori to'g'ridan-to'g'ri o'zgarmaydi va o'chirilmaydi, havola qo'lda qo'yilmaydi
 --     (trg_fin_exp_guard; fin:exp_linked); hujjat — faqat «kiritilgan → bekor qilingan» (trg_fin_exp_doc_guard; fin:exp_immutable).
---     Sahifa (modul relizi 13+) xarajatni faqat shu funksiyalar orqali yozadi (oylik maosh hisobi qatori «payroll__» — avvalgidek).
+--     Sahifa (modul relizi 13+) xarajatni faqat shu funksiyalar orqali yozadi (oylik maosh hisobi qatori — kind 'accrual', «payroll__YYYY-MM» —
+--     avvalgidek; F2.4).
 --     Hujjatsiz yozuvni to'g'ridan-to'g'ri (REST) yozish huquqi (exp_ins / exp_upd / exp_del — Direktor, Moliya menejeri) hozircha
 --     O'ZGARMAYDI: reja F2.9 «Huquqlar II» — avval detektor haftasi (o'zgarishlar jurnalida hujjatsiz to'g'ridan-to'g'ri yozuvlar 0),
 --     keyin huquq qaytarib olinadi; eski (keshdagi) sahifa deploydan keyin ham ishlaydi. Kassa qoidalari (naqd) — avvalgidek trigerda.
@@ -86,6 +87,24 @@ create index if not exists expenses_exp_doc_idx on public.expenses ("expDocId") 
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'expenses_exp_doc_fkey' and conrelid = 'public.expenses'::regclass) then
     alter table public.expenses add constraint expenses_exp_doc_fkey foreign key ("expDocId") references public.fin_exp_docs (id);
+  end if;
+end $$;
+-- F2.4 (reliz 20): maoshni hisoblash qatori (kind 'accrual' — kassa-links.sql) pul harakati emas — unda to'lov usuli, kassa hujjati va
+--   xarajat hujjati bo'lmaydi: aks holda u naqd (yoki naqdsiz) pul sifatida yashirinib qolardi. Yangi yozuvlar uchun darhol; mavjud
+--   yozuvlar tekshiriladi — mos kelmagan qator bo'lsa zanjir to'xtamaydi, deploy chiqishida «OGOHLANTIRISH» (qator id lari bilan).
+do $$ declare v_bad text; begin
+  if not exists (select 1 from pg_constraint where conname = 'expenses_accrual_chk' and conrelid = 'public.expenses'::regclass) then
+    alter table public.expenses add constraint expenses_accrual_chk
+      check (kind <> 'accrual' or (coalesce(method, '') = '' and "cashDocId" is null and "expDocId" is null)) not valid;
+  end if;
+  if exists (select 1 from pg_constraint where conname = 'expenses_accrual_chk' and conrelid = 'public.expenses'::regclass and not convalidated) then
+    select string_agg(e.id, ', ' order by e.id) into v_bad from public.expenses e
+     where e.kind = 'accrual' and not (coalesce(e.method, '') = '' and e."cashDocId" is null and e."expDocId" is null);
+    if v_bad is null then
+      alter table public.expenses validate constraint expenses_accrual_chk;
+    else
+      raise notice 'OGOHLANTIRISH: maoshni hisoblash qatorida to''lov usuli yoki hujjat bor (%): qatorni «💼 Oylik maoshni yozish» bilan qayta yozing — tekshiruv yangi yozuvlar uchun ishlaydi', v_bad;
+    end if;
   end if;
 end $$;
 
@@ -158,7 +177,7 @@ begin
   if p_row."cashDocId" is not null then
     raise exception 'Bu xarajat kassa hujjatidan ko''chgan — «Kassa» bo''limida hujjatni bekor qilish orqali o''zgaradi' using errcode = '42501', hint = 'kassa:linked_row';
   end if;
-  if coalesce(p_row.id, '') like 'payroll\_\_%' then
+  if p_row.kind = 'accrual' then   -- F2.4: maoshni hisoblash qatori (kassa-links.sql: expenses.kind)
     raise exception 'Bu — oylik maosh hisobi qatori: «💼 Oylik maoshni yozish» orqali yangilanadi (yoki o''chiriladi)' using errcode = '22023', hint = 'fin:exp_payroll';
   end if;
 end $$;

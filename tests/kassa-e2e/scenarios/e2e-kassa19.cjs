@@ -27,7 +27,8 @@ const allErrs = [];
        ('e19-old1', '${today}', '${month}', 'Ijara', 5000000, 'Sinov ijara (eski)', 'bank', 'EX-10'),
        ('e19-old2', '${today}', '${month}', 'Kanselyariya', 120000, 'Sinov qog‘oz (eski)', null, 'EX-32'),
        ('payroll__${month}', '${month}-01', '${month}', 'Maosh', 9000000, 'Avtomatik: sinov', null, null) on conflict (id) do nothing;
-     set session_replication_role = origin;`);
+     update public.expenses set kind = 'accrual' where id = 'payroll__${month}';
+     set session_replication_role = origin;`);   // F2.4: replica rejimida turni o'rnatuvchi trigger ham ishlamaydi
   async function login(uid, vp) {
     const email = q(`select email from public.users where id='${uid}'`);
     const ctx = await b.newContext({ timezoneId: 'Asia/Tashkent', viewport: vp || { width: 1440, height: 900 } });

@@ -388,5 +388,14 @@ select count(*)::text as yozilgan from zz.res \gset
 select zz.chk('ZZ yozilgan tekshiruvlar soni = kutilgan', :'yozilgan', '^' || :'kutilgan' || '$');
 
 select case when ok then 'PASS' else 'FAIL' end || ' | ' || name || case when ok then '' else ' | got=' || coalesce(got, '<null>') || ' | want~' || pat end from zz.res order by n;
+-- X1 (reliz 20, F2.4): maosh hisoblash qatori — «To'lov usuli» katagida «Hisoblash (naqd emas)» (pul chiqimi emas); oddiy xarajat — o'z usuli
+insert into public.expenses (id, date, month, category, amount, note) values ('payroll__2026-09', '2026-09-01', '2026-09', 'Maosh', 500, 'Sinov: hisoblash');
+select zz.take('exp_acc', $q$select public.sheets_tab('expenses')::text$q$);
+select zz.chk('X1 Xarajatlar: maosh hisoblash qatori — usul «Hisoblash (naqd emas)», oddiy xarajat usuli o''zgarmagan',
+  zz.cells('exp_acc', '2026-09-01', array['Toifa', 'Summa', 'To''lov usuli']) || ' / ' || zz.cell('exp_acc', '2026-10-15', 'To''lov usuli')
+    || ' / ' || zz.cell('expenses', '2026-10-15', 'To''lov usuli'),
+  '^Maosh\|500\|Hisoblash \(naqd emas\) / (.*) / \1$');
+delete from public.expenses where id = 'payroll__2026-09';
+
 select 'JAMI: ' || count(*) filter (where ok) || ' PASS / ' || count(*) filter (where not ok) || ' FAIL (jami ' || count(*) || ')' from zz.res;
 rollback;

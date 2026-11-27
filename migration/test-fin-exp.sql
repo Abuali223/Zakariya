@@ -102,6 +102,7 @@ insert into public.expenses (id, date, month, category, amount, note, method, "a
   ('e_old4', '2027-01-03', '2027-01', 'Kanselyariya', 40000, 'Sinov qog''oz (eski)', null, 'EX-32', null),
   ('payroll__2026-12', '2026-12-01', '2026-12', 'Maosh', 3000000, 'Avtomatik', null, null, null),
   ('e_kx', '2027-01-07', '2027-01', 'Kanselyariya', 50000, 'Sinov KO-2', 'cash', 'EX-32', 'cd_sinov');
+update public.expenses set kind = 'accrual' where id = 'payroll__2026-12';   -- F2.4: urug'da triggerlar o'chiq — turni o'rnatuvchi trigger ham
 set local session_replication_role = origin;
 select zz.clock('2027-01-10 10:00+05');   -- kassa hali ishga tushmagan
 

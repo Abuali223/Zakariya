@@ -181,7 +181,7 @@ const dmy = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
     const s = dir;
     // lose[fn] — shu funksiyaning keyingi javobi «yo'qoladi»; gate — berilsa, so'rov shu va'da bajarilguncha ushlab turiladi (yuborish qulfini ko'rish)
     const lose = {}; let held = false, gate = null, openGate = () => {}, nReq = 0;
-    for (const fn of ['refund_invoice', 'kassa_refund_request']) await s.pg.route(`**/rest/v1/rpc/${fn}`, async route => {
+    for (const fn of ['refund_invoice', 'kassa_refund_request', 'fin_refund_credit']) await s.pg.route(`**/rest/v1/rpc/${fn}`, async route => {
       nReq++;
       if (!lose[fn]) return route.continue();
       lose[fn] = false; held = true;
@@ -256,7 +256,54 @@ const dmy = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
       && q(`select status from public.payments where id='${UNM}'`) === 'unmatched' && refCnt(UNM) === '0' && await s.modalOpen(), { lk, tt });
     await s.closeAny();
     tryQ(() => asUser(ids.R_DIR, `select public.fin_period_lock(null, 'Sinov: davr qayta ochildi')::text`));
-    await s.pg.unroute('**/rest/v1/rpc/refund_invoice'); await s.pg.unroute('**/rest/v1/rpc/kassa_refund_request');
+    // 4e) F2.11 (reliz 20): o'quvchi avansini NAQDSIZ qaytarish — «📋» tarix → «↩ Avansni qaytarish»: usul tanlovi (naqd / bank / karta);
+    //   «Bank» — javob yo'qoladi (qaytarish yozilgan), o'sha oynadan qayta bosilsa «avval yozilgan» (ikkinchi qaytarish yo'q); bazada avans
+    //   kamaydi, qaytarishlar jurnali (bank, kimga), avans harakati (refund, bank), kassa hujjati yo'q; tarixda «Avans qaytarildi (naqdsiz)»
+    const CS = 'IQ-0013';   // joriy oy fakturasi to'langan o'quvchi (urug'), avansi sintetik
+    q(`set session_replication_role = replica;
+       insert into public.student_credit (id, "studentId", credit) values ('${CS}', '${CS}', 700000) on conflict (id) do update set credit = excluded.credit;
+       insert into public.credit_ledger (id, "studentId", "studentName", delta, "balanceAfter", reason, note, "at") values ('e2e_cl_15', '${CS}', '', 700000, 700000, 'overpay', 'Sinov: ortiqcha to‘lov', now());
+       set session_replication_role = origin;`);
+    const crOf = () => q(`select coalesce((select trim_scale(credit)::text from public.student_credit where id = '${CS}'), '-')`);
+    const crefRows = () => q(`select count(*) || '|' || coalesce(string_agg(trim_scale(amount) || ':' || coalesce(method, '-') || ':' || coalesce(payee, '-'), ','), '-') from public.refunds where target = 'credit' and "studentId" = '${CS}'`);
+    const openHist = async () => { await s.closeAny(); await s.tab('payments'); await s.pg.waitForSelector(`#pm-body [data-hist="${CS}"]`, { timeout: 30000 });
+      await s.pg.click(`#pm-body [data-hist="${CS}"]`); await s.pg.waitForFunction(() => { const b = document.querySelector('#ph-body'); return b && !b.querySelector('.loading'); }, null, { timeout: 15000 }); };
+    await openHist();
+    const hasCref = !!(await s.pg.$('#ph-cref'));
+    if (hasCref) { await s.pg.click('#ph-cref'); await s.pg.waitForSelector('#rf-cmethod', { timeout: 15000 }); }
+    const cmo = hasCref ? await s.pg.$$eval('#rf-cmethod option', o => o.map(x => x.value)) : [];
+    const head = await s.header();
+    const reqShown = async () => s.pg.$eval('#rf-reqbox', e => getComputedStyle(e).display !== 'none').catch(() => null);
+    const req0 = await reqShown();
+    if (hasCref) await s.pg.selectOption('#rf-cmethod', 'bank');
+    const cnote = await s.pg.$eval('#rf-cnote', e => e.textContent.replace(/\s+/g, ' ').trim()).catch(() => '');
+    const cbtn = await s.pg.$eval('#rf-do', e => e.textContent).catch(() => '');
+    const req1 = await reqShown();
+    ok('avans (F2.11): «📋» tarix → «↩ Avansni qaytarish» — oyna «O‘quvchi avansini qaytarish», usul: naqd / bank / karta; «Bank» — kassa hujjatisiz, tugma «Qaytarish», ariza sanasi (naqd so‘rov uchun) yashirin',
+      hasCref && head.includes('O‘quvchi avansini qaytarish') && cmo.join('|') === 'cash|bank|card' && cnote.startsWith('Avans darhol kamayadi (kassa hujjati yo‘q)')
+        && cnote.includes('Dt 6310 Kt 5110') && cbtn === 'Qaytarish' && req0 === true && req1 === false, { hasCref, head, cmo, cnote, cbtn, req0, req1 });
+    await s.pg.fill('#rf-amt', '300 000'); await s.pg.fill('#rf-reason', 'Sinov: o‘quvchi maktabdan ketdi'); await s.pg.fill('#rf-payee', 'Sinov Ota Onaevich');
+    if (await s.pg.$('#rf-pass')) await s.pg.fill('#rf-pass', pin);
+    const dl5 = s.dialogs.length;
+    lose.fin_refund_credit = true; n = await s.tmark(); await s.pg.click('#rf-do'); await s.waitToast(n, /^Xatolik: /); await btnFree();
+    tt = await s.tsince(n);
+    ok('«Bank» — tasdiq matni (bank o‘tkazmasi, kimga, sabab); javob yo‘qoldi: qaytarish yozilgan (avans 400 000), oyna ochiq, usul tanlovi qulflangan',
+      s.dialogs.slice(dl5).some(m => m.includes('O‘quvchi avansidan') && m.includes('bank o‘tkazmasi orqali qaytarilsinmi?') && m.includes('Kimga: Sinov Ota Onaevich'))
+        && crOf() === '400000' && crefRows() === '1|300000:bank:Sinov Ota Onaevich' && await s.modalOpen() && await s.pg.$eval('#rf-cmethod', e => e.disabled)
+        && tt.some(t => t.err && /^Xatolik: /.test(t.t)), { d: s.dialogs.slice(dl5), cr: crOf(), ref: crefRows(), tt });
+    n = await s.tmark(); await s.pg.click('#rf-do'); await s.modalGone();
+    tt = await s.tsince(n);
+    const led = q(`select count(*) || '|' || coalesce(string_agg(trim_scale(delta) || ':' || reason || ':' || coalesce(provider, '-') || ':' || trim_scale("balanceAfter"), ','), '-') from public.credit_ledger where "studentId" = '${CS}' and reason = 'refund'`);
+    const kdoc = q(`select count(*) from public.cash_docs where op = 'out_refund' and "sourceSnapshot" ->> 'studentId' = '${CS}'`);
+    ok('o‘sha oynadan qayta bosildi — «Qaytarish avval yozilgan ✓» (ikkinchi qaytarish yo‘q), oyna yopildi; bazada: avans harakati (−300 000, refund, bank), kassa hujjati yo‘q',
+      tt.some(t => !t.err && t.t.startsWith('Qaytarish avval yozilgan ✓') && t.t.includes('bank o‘tkazmasi')) && !(await s.modalOpen()) && crOf() === '400000'
+        && crefRows() === '1|300000:bank:Sinov Ota Onaevich' && led === '1|-300000:refund:bank:400000' && kdoc === '0', { tt, cr: crOf(), ref: crefRows(), led, kdoc });
+    await openHist();
+    const ph = await s.pg.$eval('#ph-body', e => e.innerText.replace(/\s+/g, ' ')).catch(() => '');
+    ok('«📋» tarix: joriy avans 400 000, harakatlarda «Avans qaytarildi (naqdsiz) · Avans bank o‘tkazmasi orqali qaytarildi: …» (izoh — server matni)',
+      /joriy avans: 400[ \u00a0]000/.test(ph) && ph.includes("Avans qaytarildi (naqdsiz) · Avans bank o'tkazmasi orqali qaytarildi: Sinov: o‘quvchi maktabdan ketdi"), ph.slice(ph.indexOf('Avans harakat') > 0 ? ph.indexOf('Avans harakat') : 0, 900));
+    await s.closeAny();
+    await s.pg.unroute('**/rest/v1/rpc/refund_invoice'); await s.pg.unroute('**/rest/v1/rpc/kassa_refund_request'); await s.pg.unroute('**/rest/v1/rpc/fin_refund_credit');
   }
   // ---------------- 5) Direktor: «Kassa» → «So'rovlar» — (c) sec-1: o'zi yolg'iz tasdiqlagan / o'ziga beriladigan pul — tugma yo'q
   const salCnt = tid => q(`select count(*) from public.salary_payments where "teacherId"='${tid}'`);

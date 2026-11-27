@@ -320,6 +320,31 @@ select zz.chk('E3d kassadan ko''chgan xarajatni mijoz o''zgartira / o''chira olm
   zz.as('U_DIR', $q$with x as (update public.expenses set method = 'cash' where id = 'ex_bank_1' returning id) select count(*)::text from x$q$),
   '^ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:linked_row\].* \| ERR 42501 \[kassa:cash_only_kassa\]');
 select zz.chk('E3e naqdsiz yozuvni tahrirlash — avvalgidek', zz.as('U_FM', $q$with x as (update public.expenses set amount = 710000 where id = 'ex_bank_1' returning trim_scale(amount)::text as a) select a from x$q$), '^710000$');
+-- F2.4 (reliz 20): xarajat turi (expenses.kind) — id dan hosil qilinadi; naqd ko'rinishlar (moslik P4, kassa hujjatisiz naqd yozuvlar) uni ishlatadi
+select zz.put('E3f', zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method, kind) values ('ex_k1','2027-01-04','2027-01','Ijara',1,'x','bank','accrual') returning id) select id from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (update public.expenses set kind = 'accrual' where id = 'ex_bank_1' returning id) select count(*)::text from x$q$)
+  || ' | ' || zz.as('U_FM', $q$with x as (update public.expenses set kind = 'expense' where id = 'payroll__2027-01' returning id) select count(*)::text from x$q$));
+select zz.chk('E3f F2.4: turi faqat id dan — maoshni hisoblash qatori «accrual», boshqa xarajat «expense»; mijoz yuborgan tur e''tiborsiz (yozishda ham, tahrirda ham)',
+  zz.get('E3f') || ' | ' || (select string_agg(id || '=' || kind, ',' order by id) from public.expenses where id in ('payroll__2027-01', 'ex_bank_1', 'ex_k1')),
+  '^ex_k1 \| 1 \| 1 \| ex_bank_1=expense,ex_k1=expense,payroll__2027-01=accrual$');
+select zz.as('U_FM', $q$with x as (delete from public.expenses where id = 'ex_k1' returning id) select id from x$q$);
+select zz.chk('E3g hisoblash qatorida to''lov usuli bo''lmaydi (naqd ham, bank ham — 23514); boshqa shakldagi «payroll__…» id — oddiy naqd xarajat qoidasi (faqat kassa orqali)',
+  zz.as('U_FM', $q$with x as (update public.expenses set method = 'cash' where id = 'payroll__2027-01' returning id) select count(*)::text from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note, method) values ('payroll__2027-02','2027-02-01','2027-02','Maosh',1,'x','bank') returning id) select id from x$q$) || ' | '
+  || zz.as('U_FM', $q$with x as (insert into public.expenses (id, date, month, category, amount, note) values ('payroll__x','2027-01-04','2027-01','Maosh',1,'x') returning id) select id from x$q$),
+  '^ERR 23514 .*expenses_accrual_chk.* \| ERR 23514 .*expenses_accrual_chk.* \| ERR 42501 \[kassa:cash_only_kassa\]');
+create or replace function zz.cexp(p_from date, p_to date) returns int language sql as $$
+  select coalesce(sum((i ->> 'n')::int), 0)::int from jsonb_array_elements(app.kassa_cash_rows(p_from, p_to, null) -> 'items') i where i ->> 'kind' = 'expense' $$;
+select zz.put('E3h0', (app.kassa_reconcile('2027-01-04', '2027-01-06') -> 'p4' ->> 'row') || ':' || zz.cexp('2027-01-04', '2027-01-06'));
+-- server (zanjir) yozgan, kassa ishlagan kunga, usulsiz: hisoblash qatori va boshqa shakldagi «payroll__…» id
+insert into public.expenses (id, date, month, category, amount, note) values
+  ('payroll__2027-03', '2027-01-05', '2027-01', 'Maosh', 1, 'sinov'), ('payroll__y', '2027-01-05', '2027-01', 'Boshqa', 2, 'sinov');
+select zz.chk('E3h naqd ko''rinishlar: hisoblash qatori moslik (P4) va kassa hujjatisiz naqd yozuvlarga kirmaydi, statiya olmaydi; boshqa shakldagi id — kiradi (+1), statiya toifadan',
+  ((app.kassa_reconcile('2027-01-04', '2027-01-06') -> 'p4' ->> 'row')::int - split_part(zz.get('E3h0'), ':', 1)::int)::text || ':'
+    || (zz.cexp('2027-01-04', '2027-01-06') - split_part(zz.get('E3h0'), ':', 2)::int)::text
+    || ' | ' || (select string_agg(id || '=' || kind || ':' || coalesce("articleId", '-'), ',' order by id) from public.expenses where id in ('payroll__2027-03', 'payroll__y')),
+  '^1:1 \| payroll__2027-03=accrual:-,payroll__y=expense:EX-');
+delete from public.expenses where id in ('payroll__2027-03', 'payroll__y');
 select zz.put('E4', zz.void('U_FM', zz.id('E1'), 'Tovar qaytarildi'));
 select zz.chk('E4 xarajat orderi bekor qilindi: ko''chgan yozuvlar olib tashlandi',
   (zz.js(zz.get('E4')) ->> 'status') || ' / ' || (select string_agg(id, ',' order by id) from public.expenses), '^void / ex_bank_1,payroll__2027-01$');
@@ -753,6 +778,37 @@ select zz.chk('RC5 tasdiqdan keyin avans kamaygan (100 000 → 50 000): pul beri
   || ' / ' || (select trim_scale(credit)::text from public.student_credit where id = 'T-6'),
   '^ERR P0001 \[kassa:credit_changed\].*hozir 50000 so''m, so''rovda 100000 so''m.* / approved:- / 50000$');
 select zz.put('RC5c', zz.as('U_DIR', format('select public.kassa_doc_cancel(%L, %L)::text', zz.id('RC5'), 'Avans o''zgargan')));
+-- (RN) F2.11 (reliz 20): o'quvchi avansini NAQDSIZ qaytarish (fin_refund_credit) — Direktor; bank / karta; darhol; kassa hujjatisiz
+select zz.put('RN0p8', (app.kassa_reconcile('2027-01-06', '2027-01-06') -> 'p8')::text);
+select zz.chk('RN0 rad: Moliya menejeri; usul naqd; avansdan katta summa; oluvchi yozilmagan; sabab yo''q',
+  zz.rpc('U_FM', 'fin_refund_credit', '{"sid":"T-6","amount":10000,"method":"bank","reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn0_000001"}') || ' | '
+  || zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":10000,"method":"cash","reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn0_000002"}') || ' | '
+  || zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":50001,"method":"bank","reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn0_000003"}') || ' | '
+  || zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":10000,"method":"bank","reason":"O''quvchi ketdi","payee":"Ota","clientRef":"rf_rn0_000004"}') || ' | '
+  || zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":10000,"method":"card","reason":"","payee":"Sinov Ota Onaevich","clientRef":"rf_rn0_000005"}'),
+  '^ERR 42501.* \| ERR 22023 \[kassa:bad_input\].* \| ERR 22023 \[kassa:credit_over\].*avansi 50000 so''m \| ERR 22023 \[kassa:party\].* \| ERR 22023 \[kassa:reason\]');
+select zz.put('RN1', zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":20000,"method":"bank","reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn1_000001"}'));
+select zz.chk('RN1 bank orqali: avans 50 000 → 30 000 darhol; avans jurnali (−20 000, qoldiq 30 000, refund, bank) va qaytarish jurnali (credit, bank, oluvchi, «kim» — Direktor, kassa hujjatisiz)',
+  (zz.js(zz.get('RN1')) ->> 'ok') || ':' || trim_scale((zz.js(zz.get('RN1')) ->> 'credit')::numeric) || ' / ' || (select trim_scale(credit)::text from public.student_credit where id = 'T-6')
+  || ' / ' || (select trim_scale(delta) || ':' || trim_scale("balanceAfter") || ':' || reason || ':' || provider || ':' || note from public.credit_ledger where "studentId" = 'T-6' and reason = 'refund')
+  || ' / ' || (select target || ':' || trim_scale(amount) || ':' || method || ':' || payee || ':' || "byUid" || ':' || coalesce("cashDocId", '-') || ':' || month from public.refunds where id = zz.id('RN1')),
+  '^true:30000 / 30000 / -20000:30000:refund:bank:Avans bank o''tkazmasi orqali qaytarildi: O''quvchi ketdi / credit:20000:bank:Sinov Ota Onaevich:U_DIR:-:2027-01$');
+select zz.chk('RN2 o''sha kalit — takror (ikkinchi qaytarish yo''q); o''sha kalit boshqa summa bilan — ref_mismatch; shu kalit bilan naqd so''rov — rad (kassa:ref_mismatch)',
+  (zz.js(zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":20000,"method":"bank","reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn1_000001"}')) ->> 'dup')
+  || ':' || (select count(*) from public.refunds where "studentId" = 'T-6' and method = 'bank') || ':' || (select trim_scale(credit)::text from public.student_credit where id = 'T-6') || ' | '
+  || (zz.js(zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":25000,"method":"bank","reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn1_000001"}')) ->> 'reason') || ' | '
+  || zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"credit","id":"T-6","amount":20000,"reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn1_000001"}'),
+  '^true:1:30000 \| ref_mismatch \| ERR 22023 \[kassa:ref_mismatch\]');
+select zz.put('RN3', zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"credit","id":"T-6","amount":20000,"reason":"Naqd so''rov","payee":"Sinov Ota Onaevich","clientRef":"rf_rn3_000001"}'));
+select zz.chk('RN3 naqd avans qaytarish so''rovi (20 000) kutilmoqda: naqdsiz 20 000 — jami avansdan (30 000) oshadi, rad; 10 000 — o''tadi (karta); shu so''rov kaliti bilan naqdsiz — rad (via cash)',
+  (zz.js(zz.get('RN3')) ->> 'status') || ' | '
+  || zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":20000,"method":"bank","reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn3_000002"}') || ' | '
+  || (zz.js(zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":10000,"method":"card","reason":"Karta orqali","payee":"Sinov Ota Onaevich","clientRef":"rf_rn3_000003"}')) ->> 'credit') || ' | '
+  || (zz.js(zz.rpc('U_DIR', 'fin_refund_credit', '{"sid":"T-6","amount":1000,"method":"bank","reason":"O''quvchi ketdi","payee":"Sinov Ota Onaevich","clientRef":"rf_rn3_000001"}')) ->> 'via'),
+  '^approved \| ERR 22023 \[kassa:refund_pending\].*\(20000 so''m\).*avansdan \(30000 so''m\).* \| 20000 \| cash$');
+select zz.put('RN3c', zz.as('U_DIR', format('select public.kassa_doc_cancel(%L, %L)::text', zz.id('RN3'), 'Naqdsiz qaytarildi')));
+select zz.chk('RN4 moslik P8 (naqd qaytarish ↔ KO-2) naqdsiz qaytarishlarni sanamaydi; kassa qoldig''i o''zgarmagan',
+  (app.kassa_reconcile('2027-01-06', '2027-01-06') -> 'p8')::text || ' = ' || zz.get('RN0p8'), '^(\{.*\}) = \1$');
 -- fakturadan qaytarishga avansni qo'shish (clawback) — shu avans boshqa kutilayotgan so'rovda band bo'lsa rad (ikki marta berilmasin)
 select zz.put('RC6', zz.rpc('U_DIR', 'kassa_refund_request', '{"target":"credit","id":"T-7","amount":40000,"reason":"Avansning bir qismi","payee":"Sinov Ota Onaevich","clientRef":"rf_rc6_000001"}'));
 select zz.chk('RC6 avans (100 000) dan 40 000 so''rovi kutilmoqda: fakturadan qaytarishga avans qo''shilsa — rad; avanssiz — o''tadi',

@@ -122,7 +122,7 @@ shu jadval ham yangilanadi):
 | k12 | `e2e-kassa12.cjs` | eslatmalar (muddati o‘tgan avans), RP-22 KPI | 13 |
 | k13 | `e2e-kassa13.cjs` | to‘liq Buxgalter roli: faqat ko‘rish, telefon yo‘q, ismsiz hisobotlar, «Profil» | 39 |
 | k14 | `e2e-kassa14.cjs` | ikki bosqichli smena topshirish («Qabul qildim», «Rad etish», komissiya), yopish / topshirishdan oldin navbat yuborilishi va kassa:stale, «Yuborilmadi» yozuvlari uchun tanlov, sinov kassasi navbatsiz, «Қ» blankalari, #kc-ho / #kc-skip, kamomad qarori (javobgar kartasi) | 41 |
-| k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | 29 |
+| k15 | `e2e-kassa15.cjs` | qaytarish oynasi kaliti (kassa ishga tushgan: usul qulfi, naqd ↔ naqdsiz rad), o‘quvchi avansini naqdsiz qaytarish (F2.11: usul tanlovi, javob yo‘qolganda takror yozilmaydi, tarix), Direktor o‘ziga pul bermasligi (FD-48), «To‘lov» oynasida rad etilgan yozuvni almashtirish, pul maydonlari, to‘xtatilgan kassa usul tanlovi | 33 |
 | k16 | `e2e-kassa16.cjs` | T1 (katta kirim qayta so‘raladi; chiqim — 2-ro‘yxat + Direktor), server rad etsa «Tasdiqlash» qayta yoqiladi, ishdan ketgan xodim, asosiy ↔ sinov kassa (sinov kassasida navbat yo‘q) | 31 |
 | k17 | `e2e-kassa17.cjs` | FD-28 fayllari: qarzdorlar CSV («Moliya»), «Buxgalteriya» A4 hisoboti, xodimlar davomati oylik hisoboti — Direktorga (davomatda HR’ga ham) ismli; Moliya menejeri, buxgalter va kassirga ismsiz (o‘quvchi ID, xodim maosh ID’si — «Kamera ID»siz xodimning ruhsati ham, «-ismsiz», izoh), qolgan ustunlar qatorma-qator va jamlar bir xil; ekrandagi ro‘yxat ism bilan | 27 |
 | k18 | `e2e-kassa18.cjs` | «Kassir» roli (egasi, 2026-11-17): asosiy rol «Kassir» — ochiq kunda kassa kitobi varag‘i (qoralama), kunni yopish, yopilgan kunning yakuniy kunlik hisoboti va kassa kitobi varag‘i («НУСХА»); Direktor: rol tanlovida yangi «Kassir» / «G‘aznachi» yozuvlari, «G‘aznachi» lavozimli kartaga bog‘langan yangi xodimga «Kassir» oldindan tanlanadi (kirim, chiqim so‘rovi, pul berish — k1; ochiq kun hisoboti — k4) | 9 |
@@ -136,9 +136,15 @@ shu jadval ham yangilanadi):
 | sl | `e2e-sales.cjs` | «Sotuvchi» roli (egasi, 2026-11-19): menyuda yagona «Ota-onalar bilan aloqa» bo‘limi, faol oilalar (arxivdagisiz) niqoblangan raqam bilan, «📞 Raqamni ko‘rsatish» → tel: havolasi va jurnal yozuvi, hisoblagich, ota-ona ismi bo‘yicha qidiruv; 🔍 qidiruv, to‘lov navbati, tahrir / eksport tugmasi yo‘q; kirishda konsol xatosi va RLS rad etgan so‘rov yo‘q; REST (sotuvchi seansi): o‘quvchi, shaxsiy karta, faktura — bo‘sh, jurnal va Direktor jurnali — rad, o‘zini Direktor qila olmaydi; Direktor: bo‘lim «O‘quvchilar» guruhida, «Sotuvchilar jurnali», «Foydalanuvchilar»dagi rol tanlovi, «Tahrirlash» oynasida sotuvchi ism-familiyasini o‘zgartirish (rol va holat o‘zgarmaydi) | 15 |
 | ui | `e2e-ui.cjs` | yagona dizayn (egasi, 2026-11-24): qurilmada eski tanlov (`iqror_ui = 'v1'`) va manzilda `?ui=v1` bo‘lsa ham yangi dizayn ochiladi, eski tanlov o‘chiriladi; kompyuterda ikonali panel, telefonda pastki menyu; Direktor bosh sahifasi yangi (klassik bloklar yo‘q); «Profil»da dizayn almashtirgichi yo‘q; sahifa xatolari yo‘q — 5 rol × 1440 / 390 | 42 |
 
-Jami: 29 o‘tish, 735 tekshiruv (kassa 593, to‘lov 24, eski oqimlar 31, arxiv 30, sotuvchi 15, yagona dizayn 42).
+Jami: 29 o‘tish, 739 tekshiruv (kassa 597, to‘lov 24, eski oqimlar 31, arxiv 30, sotuvchi 15, yagona dizayn 42).
 
-**Holat (2026-11-27, F2.8 2-qism).** Oxirgi to‘liq o‘tish — 2026-11-27: 29 o‘tish, 735 tekshiruv — hammasi o‘tdi. Kod — davr qulfi
+**Holat (2026-11-27, reliz 20).** Oxirgi to‘liq o‘tish — 2026-11-27: 29 o‘tish, 739 tekshiruv — hammasi o‘tdi (to‘liq o‘tishda `k15`
+ning yangi tarix tekshiruvi sinov kutilmasi tufayli yiqilgan — server izohi oddiy apostrof bilan; kutilma tuzatilgach `k15` yakuniy kod
+bilan alohida o‘tkazildi: 33/33). Kod — maosh hisoblash qatori `expenses.kind` bilan va o‘quvchi avansini naqdsiz qaytarish
+(`SESSIYA-ISHLARI.md` §96; modul relizi 20): `k15` — «📋» → «↩ Avansni qaytarish», bank usuli (+4 tekshiruv); `k19` urug‘ida maosh
+hisoblash qatoriga `kind`; qolgan ssenariylar o‘zgarishsiz o‘tdi.
+
+**Oldingi holat (2026-11-27, F2.8 2-qism).** To‘liq o‘tish — 29 o‘tish, 735 tekshiruv — hammasi o‘tdi. Kod — davr qulfi
 barcha pul jadvallariga (`SESSIYA-ISHLARI.md` §95; modul relizi 19): `k22` — «To‘lovlar»da yopilgan oy (🔒 izoh, faktura tugmalari
 o‘chiq; 15 tekshiruv); qolgan ssenariylar o‘zgarishsiz o‘tdi (qulf matnlari, oy oxiri ro‘yxati).
 

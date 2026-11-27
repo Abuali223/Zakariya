@@ -446,6 +446,8 @@ begin
     'rows', v);
 end $$;
 
+-- Maosh hisoblash qatori (`payroll__YYYY-MM`, reliz 20 dan expenses.kind = 'accrual' — kassa-links.sql; ustun yo'q zanjirda — ID bo'yicha):
+--   «To'lov usuli» katagida «Hisoblash (naqd emas)» — ish haqi hisoblangani, pul chiqimi emas (to'lov — maosh to'lovlarida).
 create or replace function app.sheets_tab_expenses(p_from text) returns jsonb
 language sql stable security definer set search_path = app, public, pg_temp as $$
   select jsonb_build_object(
@@ -453,7 +455,10 @@ language sql stable security definer set search_path = app, public, pg_temp as $
     'money', jsonb_build_array(3),
     'rows', coalesce(jsonb_agg(jsonb_build_array(
         nullif(e.date, ''), coalesce(nullif(e.month, ''), left(e.date, 7)), coalesce(nullif(e.category, ''), 'Boshqa'),
-        app.sheets_num(e.amount), app.sheets_method(to_jsonb(e) ->> 'method'), nullif(e.note, ''), nullif(to_jsonb(e) ->> 'cashDocId', ''))
+        app.sheets_num(e.amount),
+        case when coalesce(to_jsonb(e) ->> 'kind', case when e.id ~ '^payroll__[0-9]{4}-(0[1-9]|1[0-2])$' then 'accrual' else 'expense' end) = 'accrual'
+             then 'Hisoblash (naqd emas)' else app.sheets_method(to_jsonb(e) ->> 'method') end,
+        nullif(e.note, ''), nullif(to_jsonb(e) ->> 'cashDocId', ''))
       order by coalesce(nullif(e.date, ''), e.month), e."createdAt" nulls first, e.id), '[]'::jsonb))
   from public.expenses e
   where p_from is null or coalesce(nullif(e.month, ''), left(e.date, 7)) >= p_from
