@@ -3716,6 +3716,51 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   farq» bo'lsa — to'lanmagan fakturalar uchun shu oy «↻ Qayta hisoblash» aniq tarkibni yozadi. Ustunlar va trigger asosiy zanjirda —
   keyingi deploy bilan chiqadi (deploy egasi qarori bilan).
 
+## 99) F2.5 — RP-09: barcha to'lov usullari bo'yicha statiya matritsasi va maosh taqsimoti (reliz 23) — 2026-11-27
+
+- **Egasi (2026-11-27):** «Qolgan bandlarni boshla» — navbatdagi band F2.5 (reja: RP-09 — o'quv va kalendar yili, barcha usullar, maosh
+  taqsimoti `payroll_lines` × lavozim, XLSX; qabul mezoni — Jami = Σ hujjatlar).
+- **Server (`fin-matrix.sql`, `--dev` zanjir):** `public.fin_matrix(tur, yil)` — o'quv (sentyabr–avgust) yoki kalendar yili, 12 oy; ko'radi —
+  Direktor, Moliya menejeri, buxgalter (oylik kassa to'plami bilan bir xil; boshqalarga avval 42501); faqat yig'ma summalar (ism yo'q, FD-28).
+  Har hujjat bir marta sanaladi — kassa orderi (KO-1 / KO-2) bilan bog'langan yozuv kassada, jadvalning o'zida emas:
+  - kassa — o'tkazilgan KO-1 / KO-2 naqd qatorlari, amaldagi statiya (qayta tasnifdan keyin), sinov kassasisiz, oy — kassa kuni;
+  - o'quv to'lovlari — kassa orderisiz (yagona tushum qoidasi, kun — `pay_day`): Click / Uzum / Payme — onlayn, terminal — karta, bank,
+    o'zaro hisob (dalolatnomaga bog'langani ham), kassagacha naqd; biriktirilgan — IN-01, biriktirilmagan — OP-16; avansdan qo'llash,
+    grant, avans ko'chirish — pul emas;
+  - **topilgan nozik holat:** egasiga qaytarilgan to'lov (holati «refunded») yagona tushum ta'rifida yo'q, uning qaytarishi esa jurnalda
+    (kassadan — KO-2 OP-16) bor — juftsiz qolib, sof natija kam chiqardi. RP-09 da ikkalasi ham bor (OP-16 kirim va chiqim);
+  - «Buxgalteriya» xarajatlari — bank, karta, kassagacha naqd, eski yozuv («boshqa»); statiya yozuvdan, bo'lmasa eski toifadan («taxminiy»);
+    hisobdor orqali sarf (avans hisoboti, «Д-» dalolatnoma; pul oldin OP-06 bilan chiqqan) — alohida ustun, pul jamiga kirmaydi;
+  - qaytarishlar (OP-15 / OP-16; oy — yozilgan kun, eski yozuvdagi faktura oyi emas), maosh (OP-09; eski yozuvda summa — net +
+    o'rinbosarlik) va avans (OP-08) to'lovlari — kassa orderisizlari;
+  - maosh taqsimoti — tasdiqlangan vedomost qatorlari (maosh − ushlanma, 0 dan kam emas, + o'rinbosarlik — «💼 Oylik maoshni yozish» qoidasi)
+    lavozimdan statiyaga (`app.fin_pos_article`: o'qituvchilar, kurator — EX-01; xizmat ko'rsatuvchilar — EX-02; ma'muriy — EX-03; qabul va
+    marketing — EX-04; apostrof turlari, bo'shliq va harf farqsiz; ro'yxatda yo'q — «aniqlanmagan»); vedomost tasdiqlanmagan oy — «Maosh»
+    qatori taqsimlanmagan; hisoblash — pul jamiga kirmaydi.
+  Ichki o'tkazma — statiyasi pul oqimida «ichki» (OP-01…OP-05): belgilanadi, sof oqimga kirmaydi (dastlab kassa qatoridagi hisobvaraq bo'yicha
+  ham aniqlanardi — mutatsiya bu yo'l ortiqcha ekanini ko'rsatdi: bankka / bankdan orderlar statiyasi qat'iy; aralash qatorda noto'g'ri belgi
+  xavfi bo'lgani uchun olib tashlandi). Nazorat (`sources`, `kassaHeader`, `payroll.byMonth`): har manba — hujjatlar soni va jami; kassa —
+  order sarlavhalari; maosh — oy bo'yicha taqsimot «Maosh» qatori bilan (tasdiqlangan oyda farq); statiyasiz xarajat toifalari ro'yxati.
+- **Sahifa:** «Buxgalteriya» → «📊 RP-09 matritsa» (Direktor, Moliya menejeri, buxgalter — faqat ko'rish rejimida ham; `fin-matrix.js`):
+  davr turi va yil, ko'rinish (pul — barcha usullar yoki bitta usul, hisobdor, hisoblangan maosh), jamlar va nazorat belgilari, statiya ×
+  oy jadvali, maosh taqsimoti (oylar, lavozimlar), nazorat jadvali; XLSX — 4 varaq (Matritsa, Usullar, Maosh taqsimoti, Nazorat).
+- **Reliz 23:** `fin-version`, `SERVER_VER`, `kassa-checks` (ochiq funksiyalar 59, ichki +1, barmoq izlari 385), `test-fin-rights` (L4 / L4b
+  yopiq ro'yxatlariga `fin_matrix`). Sh-8 ga **B22** — lavozim → statiya moslamasi (buxgalter tasdig'iga).
+- **Sinovlar:** yangi `test-fin-matrix.sql` (53: huquq va davr, lavozim moslamasi — sahifadagi 24 lavozimning hammasi, har manba qoidasi,
+  Toshkent kuni, orqa sanali qo'lda to'lov, yarim tundan keyin o'tkazilgan order, nazorat, kalendar yili, ismsizlik); mutatsiya 40/40
+  (birinchi o'tishda 3 tasi tirik — ikkitasi yakuniy oy filtri tufayli ekvivalent, biri ortiqcha kod yo'li: tuzatildi / almashtirildi);
+  `fin-matrix.test.mjs` (11; sahifadagi lavozimlar ro'yxati server ro'yxati bilan solishtiriladi); brauzer — yangi `k25` (15).
+- **Tezlik:** sintetik yil — 15 000 kassa orderi, 40 000 to'lov, 8 000 xarajat, 3 000 maosh to'lovi, 1 200 vedomost qatori (67 200 hujjat):
+  o'quv yili 1,3 s (birinchi chaqiruv 2,7 s); dastlab 4,2 s edi — to'lov kuni (`pay_day`) har to'lovda ikki marta hisoblanardi, endi bir
+  marta. Maktabning haqiqiy yillik hajmi bundan bir necha barobar kam.
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 69/69, jonli zanjir va qayta zanjir, tugun va server sinovlari) — hammasi
+  yashil (`test-fin-matrix` 53/53, `test-kassa-checks` 55/55, `test-fin-rights` 125/125); tezlik tuzatishidan keyin maqsadli to'plamlar
+  (yangi dev zanjir: `test-fin-matrix`, `test-fin-rights`, `test-kassa` 339/339, `test-inv-parts`, `test-kassa-checks`, tugun) — yashil;
+  brauzer to'plami — 32 o'tish, 777 tekshiruv, hammasi o'tdi.
+- **Egasi va buxgalter uchun:** RP-09 — yil bo'yicha barcha pul harakati statiyalar kesimida (kassa, bank, karta, onlayn, o'zaro hisob) va
+  maosh fondining statiyalar bo'yicha taqsimoti; «Jami = Σ hujjatlar» belgisi har ochilganda tekshiriladi. Buxgalter B22 (lavozim → statiya)
+  ni tasdiqlashi kerak; ro'yxatda yo'q lavozim RP-09 da «aniqlanmagan» bo'lib ko'rinadi. Modul bilan birga (`--dev`) — keyingi deploy bilan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

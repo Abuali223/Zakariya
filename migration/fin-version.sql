@@ -86,8 +86,11 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --     22 — 2-bosqich F2.7: faktura tarkibi — invoices."grossAmount" / "discountParts" (asosiy zanjir: discounts.sql, inv-parts.sql —
 --          trigger trg_invoice_zparts, eski fakturalarni to'ldirish; reprice_invoice meta); shu modulda — davr qulfi tarkib ustunlarini
 --          ham qamraydi (app.fin_lock_invoices), buxgalter ko'rinishi invoices_acc da tarkib ustunlari.
+--     23 — 2-bosqich F2.5: RP-09 — barcha to'lov usullari bo'yicha statiya matritsasi (o'quv / kalendar yili; fin-matrix.sql:
+--          public.fin_matrix — Direktor, Moliya menejeri, buxgalter) va maosh taqsimoti (tasdiqlangan vedomost × lavozim ->
+--          EX-01…EX-04, app.fin_pos_article); nazorat — har manba bo'yicha hujjatlar soni va jami (Jami = Σ hujjatlar).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 22 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 23 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

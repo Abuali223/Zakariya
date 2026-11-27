@@ -63,7 +63,7 @@ o‘zgartiradi. Hammasi sinov stendida, dushanba–juma; kassirlar — kassa yop
   raqami bilan kiritiladi; aka-uka / opa-singil to‘lovida har o‘quvchiga alohida chek.
 - [ ] **Buyruqlar (G5)** 12-dekabrgacha imzolangan: imzo ro‘yxatlari (1- va 2-ro‘yxat), inventarizatsiya komissiyasi, kassir (g‘aznachi) va o‘rinbosari, to‘liq moddiy javobgarlik shartnomalari (kamida kassir va o‘rinbosar bilan, kerak bo‘lsa zavxoz bilan ham; matnni yurist yakunlaydi), shakllar, hujjatlar aylanishi grafigi, ichki kassa nizomi; 1-buyruq 5-bandi — ijroni Direktorning o‘zi nazorat qiladi.
 - [ ] **Hisob siyosati (G2):** hisobvaraqlar, statiyalar va operatsiyalar ro‘yxatini buxgalter tasdiqlagan — tasdiq varag‘i `shakllar.md`, **Sh-8**
-  (B1–B21): 21-noyabr — kassa qismi, buyruq namunalari va qog‘oz shakllar bo‘yicha vaqtincha tasdiq; 12-dekabr — imzo; B19 — 19-dekabr.
+  (B1–B22): 21-noyabr — kassa qismi, buyruq namunalari va qog‘oz shakllar bo‘yicha vaqtincha tasdiq; 12-dekabr — imzo; B19 — 19-dekabr.
 - [ ] **Maosh (G3):** vedomost tasdig‘i yoqilgan (dekabrdan kechikmay); 2 ta takroriy maosh ID ni Direktor xodim kartasidagi «Yangi noyob ID
   berish» tugmasi bilan tuzatgan (aks holda vedomost HR’ga yuborilmaydi); noyabr vedomosti noyabr maoshi berilishidan oldin tizimda
   tayyorlanib, HR tasdiqlagan; dekabr vedomosti — maosh qaysi kun bo‘lmasin, maosh kunidan oldin tasdiqlanadi (yanvarda bo‘lsa — maosh

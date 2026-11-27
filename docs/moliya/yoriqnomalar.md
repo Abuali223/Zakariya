@@ -312,6 +312,17 @@ haftalar kesimida, imzolanadi; «⬇ Oylik to‘plam (Excel)» — buxgalter uch
 (kunlar bo‘yicha), E3 kassa kunlari (KO-4 jamlari, sanash va farq, Z-hisobot), E4 hisobdorlar (oy boshi, berildi, qaytdi,
 hisobot, oy oxiri) → Direktor «Davr»da surat oladi va davrni yopadi.
 
+**Yil bo‘yicha (har oy yopilgach yangilanadi) — RP-09.** «Buxgalteriya» → **«📊 RP-09 matritsa»**: o‘quv yili (sentyabr–avgust) yoki
+kalendar yili; statiya × oy jadvali — barcha pul harakati (kassa orderlari; kassadan tashqari o‘quv to‘lovlari — Click / Uzum / Payme,
+terminal, bank, o‘zaro hisob; «Buxgalteriya» xarajatlari; qaytarishlar; maosh va avans to‘lovlari) yoki «Ko‘rinish»da bitta usul.
+Hisobdor xarajatlari (avans hisoboti — pul oldin avans sifatida berilgan) va hisoblangan maosh (tasdiqlangan vedomost × lavozim →
+EX-01…EX-04) — alohida, pul jamiga kirmaydi; ichki o‘tkazma (bankka topshirish, bankdan olish, korporativ karta) — belgili, sof oqimga
+kirmaydi. Yashil belgilar: «Jami = Σ hujjatlar» (har manba jami matritsa jamiga teng) va «kassa orderlari»; «≈ toifadan» — statiya eski
+xarajat toifasidan olingan (yozuvda statiya yo‘q); «statiyasiz toifalar» — shu xarajatlarga statiya tanlab qayta saqlang. «Maosh
+taqsimoti»: tasdiqlangan oyda taqsimot «Maosh» qatori bilan teng bo‘lishi kerak (farq bo‘lsa yoki qator yozilmagan bo‘lsa — «💼 Oylik
+maoshni yozish»); «aniqlanmagan» lavozim statiyasi buxgalter bilan kelishiladi (Sh-8, B22). «⬇ Excel (XLSX)» — to‘rt varaq: Matritsa,
+Usullar, Maosh taqsimoti, Nazorat; faylda ism yo‘q.
+
 Kassa to‘xtatilib qayta ishga tushirilgan oyda KO-3 va «Statiyalar»da **«Qayta ishga tushirish farqi»** qatori bor:
 davr boshi + kirim − chiqim + farq = davr oxiri. Farq — texnik «Д-» dalolatnoma (to‘xtatilgan davrdagi naqd harakat; kassa
 kitobiga kirmaydi): uni nazorat ro‘yxatidagi «Kassani to‘xtatish va qayta ishga tushirish» qatori (to‘xtatilgan davrda kassa

@@ -131,6 +131,7 @@ set local iqror.migrating = '1';
 --dev \ir fin-exp.sql
 --dev \ir fin-cp.sql
 --dev \ir kassa-fix.sql
+--dev \ir fin-matrix.sql
 --dev \ir fin-version.sql
 \ir payer-code-mask.sql
 \ir audit-10-davomat.sql
