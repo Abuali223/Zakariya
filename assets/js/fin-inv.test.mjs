@@ -3,12 +3,12 @@
 //   node --test assets/js/fin-inv.test.mjs
 //   countHtml — INV-16 (oylik / yillik / moddiy javobgar almashganda): sarlavha va shakl kodi, sababi, tilxat, blankalar, rahbar qarori,
 //   komissiya imzolari (rais / a'zo), uch tilda; oddiy sanash o'zgarmagan. lastWorkday, blanksRead, monthCheckRows / monthCheckSummary,
-//   controlRows (invMissing). Ma'lumotlar to'qima.
+//   controlRows (invMissing), lockScope (davr qulfi qamrovi — reliz 19, F2.8 2-qism). Ma'lumotlar to'qima.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as W from './fin-words.js';
 import { countHtml } from './fin-print.js';
-import { lastWorkday, blanksRead, monthCheckRows, monthCheckSummary, controlRows } from './fin-kassa.js';
+import { lastWorkday, blanksRead, monthCheckRows, monthCheckSummary, controlRows, lockScope } from './fin-kassa.js';
 
 const text = h => h.replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
   .replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
@@ -148,4 +148,16 @@ test('controlRows: invMissing — oylik komissiya inventarizatsiyasi qatori (sin
   const ok = row({ invMissing: [] }); assert.equal(ok.level, 'ok'); assert.equal(ok.value, 'kamchilik yo‘q');
   assert.equal(row({ invMissing: [{ month: '2027-01', lastDay: '2027-01-29' }], isTest: true }), undefined);
   assert.equal(row({}), undefined);
+});
+
+test('lockScope (F2.8, 2-qism): 19-relizdan qulf matni — fakturalar, avans harakatlari, qaytarishlar, vedomost; eski serverda — avvalgi matn', () => {
+  const v19 = lockScope(19), v18 = lockScope(18);
+  assert.equal(v18, 'to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi');
+  for (const w of ['to‘lov, xarajat, maosh, xodim avansi, qaytarish va o‘quvchi avansi yozuvlari', 'hisob-fakturalari yaratilmaydi, qayta hisoblanmaydi va bekor qilinmaydi',
+    'oylik vedomost yuborilmaydi, tasdiqlanmaydi va qayta ochilmaydi', 'eski qarzga to‘lov qabul qilinadi']) assert.ok(v19.includes(w), w);
+  assert.equal(lockScope(undefined), v18); assert.equal(lockScope('20'), v19);
+  // vedomost bandi: tasdiqlanmagan (warn) — ko'rsatma «davr yopilishidan OLDIN»
+  const r = monthCheckRows({ ended: true, items: [{ code: 'payroll', level: 'warn', run: 'submitted', n: 0, sum: 0, approvalFrom: '2026-11' }] })[0];
+  assert.equal(r.level, 'warn'); assert.equal(r.value, 'vedomost — tasdiqqa yuborilgan; to‘lanmagan qoldiq yo‘q');
+  assert.ok(r.hint.startsWith('Vedomost davr yopilishidan OLDIN tasdiqlanadi'));
 });

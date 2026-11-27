@@ -3565,6 +3565,40 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   etilib imzolanadi; keyin «Davr» → «Oy oxiri ro'yxati» → Direktor oyni yopadi. Keyingi qadam — F2.8 2-qism (barcha pul jadvallari
   uchun oy qulfi).
 
+## 95) F2.8 (2-qism) — davr qulfi barcha pul jadvallariga (reliz 19) — 2026-11-27
+
+- **Egasi (2026-11-27):** «Davom eting» — F2.8 ning 2-qismi: yopilgan davr surati (qarzdorlik, avans, to'lanmagan ish haqi) keyin jim
+  o'zgarmasligi uchun qulf to'lov / xarajat / maosh / xodim avansidan tashqari qolgan pul jadvallariga ham.
+- **Qarorlar (egasi barcha qarorlarni menga topshirgan):** hisoblanish kuni — faktura uchun oyning 1-kuni (surat ham joriy oy
+  fakturasini shu oy qarziga qo'shadi), vedomost uchun oyning oxirgi kuni (ish haqi oy oxirida hisoblanadi; qulf 30-dekabrgacha bo'lsa
+  dekabr vedomosti hali tasdiqlanadi). Faktura: yangi yozuv, o'chirish, summa / asosiy narx / chegirma / imtiyoz / foiz / kasallik /
+  oy / o'quvchi / hisob oralig'i / narx kaliti va bekor holatiga kirish-chiqish — rad; **to'lov qo'llanishi** (to'langan summa, holat
+  to'langan / qisman / kutilmoqda, kanal, to'lov vaqti) — cheklanmaydi: eski qarzga yanvarda to'lov — yanvar pul hodisasi (to'lovning
+  o'z kuni qulfi bilan). Avans harakati: foydalanuvchi yozuvida sana — server vaqti (ilgari mijoz orqa sana bera olardi), yopilgan
+  davr yozuvi o'zgarmaydi va o'chirilmaydi. Qaytarish: yopilgan davr yozuvining pul maydonlari (summa, nishon, o'quvchi, oy, usul,
+  kassa hujjati) o'zgarmaydi, o'chirilmaydi; ism (maxfiy kodni yashirish) — cheklanmaydi. Vedomost: yuborish, tasdiqlash, qaytarish,
+  qayta ochish va qatorlari — rad; shuning uchun oy oxiri ro'yxatida tasdiqlash rejimidagi tugagan oy vedomosti tasdiqlanmagan bo'lsa —
+  ogohlantirish. Server (zanjir / migratsiya, webhook, service_role) — mustasno (kalitlarni kanonlash, maxfiy kodni yashirish va b.).
+  Mavjud oqimlar tekshirildi: kassa orqali qaytarish faqat yangi yozuvni bog'laydi, qaytarish orderi bekor qilinmaydi, vedomost va
+  avans jurnaliga boshqa yozuvchilar — faqat zanjir; foydalanuvchi oqimlari (qayta hisoblash, bekor qilish, o'chirish) yopilgan oyda
+  aniq xabar bilan to'xtaydi.
+- **Server:** `fin-period.sql` — `app.fin_lock_hit` (qulf sozlamasi FOR SHARE, tizim mustasno), `app.fin_lock_invoices`,
+  `app.fin_lock_credit`, `app.fin_lock_refunds`, `app.fin_lock_payroll`; triggerlar `trg_fin_zlock` (invoices, credit_ledger, refunds,
+  payroll_runs, payroll_lines); xato — 42501, `fin:locked`. `kassa-day.sql` — `kassa_month_check`: vedomost bandi `approvalFrom`, warn.
+- **Sahifa:** «To'lovlar» — yopilgan oy tanlansa 🔒 izoh, «Hisob-fakturalar yaratish», «Qayta hisoblash», «To'lanmaganlarni
+  tozalash» o'chadi, qatordagi «Bekor» / «O'chir» ko'rinmaydi; Kassa — qulf matni (holat satri, «Davr» oynasi, tasdiq oynalari)
+  `lockScope`: 19-relizdan fakturalar, avans harakatlari, qaytarishlar va vedomost ham; vedomost ko'rsatmasi — «davr yopilishidan OLDIN».
+- **Reliz 19:** `fin-version.sql`, `SERVER_VER`, `kassa-checks.sql` (ichki funksiyalar 126, himoya triggerlari 33, 8-band ro'yxati,
+  barmoq izlari 372), `test-kassa-checks` (A0).
+- **Sinovlar:** yangi `test-fin-lock.sql` (31 tekshiruv: fakturalar, avans, qaytarishlar, vedomost, oy oxiri ro'yxati, chegaralar —
+  qulf 30.12 va 30.11, server, qulfsiz; mutatsiya — 16/16 ushlandi), `fin-inv.test.mjs` (+1: `lockScope`, vedomost ko'rsatmasi);
+  brauzer: `k22` (+1 — «To'lovlar»da yopilgan oy).
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 69/69, jonli zanjir, tugun va server sinovlari) — hammasi yashil;
+  brauzer to'plami — 29 o'tish, 735 tekshiruv (kassa 593), hammasi o'tdi.
+- **Egasi va buxgalter uchun:** oy vedomostini davr yopilishidan oldin tasdiqlang (oy oxiri ro'yxati eslatadi). Davr yopilgach o'sha
+  oylar fakturalari tuzatilmaydi — farq joriy oyda hujjatlanadi (masalan qaytarish yoki avans); zarurat bo'lsa Direktor «Davr»da
+  davrni sababi bilan qayta ochadi va amaldan keyin qayta yopadi. Kassa moduli hali `--dev` — jonli zanjirga o'tkazish bilan chiqadi.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

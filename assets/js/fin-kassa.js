@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 18;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 19;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -402,7 +402,7 @@ function draw() {
   if (num(s.undecidedShortages) > 0) warn.push(['#B42318', '#FDECEC', `Qarori kutilayotgan kamomad: ${s.undecidedShortages} ta${m.director ? ' — pastda qaror qabul qiling.' : ' (Direktor qarori).'}`]);
   // eslatma (F1.24): avans hisoboti muddati (3 ish kuni) o'tgan hisobdorlar — ismlar nazorat ro'yxatida
   if (s.accOverdue && num(s.accOverdue.n) > 0 && (m.list2 || m.director)) warn.push(['#B54708', '#FEF3E2', `Avans hisoboti muddati o‘tgan hisobdorlar: ${num(s.accOverdue.n)} ta (${som(s.accOverdue.sum)}) — «Avans hisoboti» yoki qaytim; ismlar — nazorat ro‘yxatida.`]);
-  if (s.lockedThrough && (m.director || m.list2)) warn.push(['#475467', '#F2F4F7', `Davr ${dmy(s.lockedThrough)} gacha yopilgan: shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.`]);
+  if (s.lockedThrough && (m.director || m.list2)) warn.push(['#475467', '#F2F4F7', `Davr ${dmy(s.lockedThrough)} gacha yopilgan: shu sanagacha ${lockScope(s.version)}.`]);
   if (s.limit && s.limit.exceeded) warn.push(['#B54708', '#FEF3E2', `Kassa qoldig‘i limitdan (${som(s.limit.cashLimit)}) oshgan — ortiqchasini bankka topshiring.`]);
   // Sh-8 B15: bankka topshirish (inkassatsiya) kuni — jadval «⚙ Sozlamalar»da (standart — juma); sinov kassasida va hujjat yozib
   //   bo'lmaydigan holatda (kun yopilgan, kecha yopilmagan, smena topshirilmoqda …) — yo'q: o'tkazib yuborilgani — nazorat ro'yxatida
@@ -1361,6 +1361,12 @@ function saveJson(name, obj) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' }));
   a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
+// Davr qulfi qamrovi (fin-period.sql): 19-relizdan — hisob-fakturalar, o'quvchi avansi harakatlari, qaytarishlar va oylik vedomost ham
+export function lockScope(ver) {
+  return Number(ver || 0) >= 19
+    ? 'to‘lov, xarajat, maosh, xodim avansi, qaytarish va o‘quvchi avansi yozuvlari kiritilmaydi va o‘zgartirilmaydi; o‘sha oylar hisob-fakturalari yaratilmaydi, qayta hisoblanmaydi va bekor qilinmaydi, oylik vedomost yuborilmaydi, tasdiqlanmaydi va qayta ochilmaydi (eski qarzga to‘lov qabul qilinadi)'
+    : 'to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi';
+}
 // F2.8: oy oxiri ro'yxati (kassa_month_check) — server faktlarni beradi, baho va matn shu yerda
 const MC_LBL = { days_open: 'Yopilmagan kassa kunlari', days_pending: 'Hali bog‘lanmagan yozuvlar bilan yopilgan kunlar', unverified: 'Tekshirilmagan (yopilgan) kunlar',
   inv: 'Oylik komissiya inventarizatsiyasi (INV-16)', shortages: 'Qarori kutilayotgan kamomad', fixes: 'Qaror kutayotgan qayta tasnif (QT)', z: 'Onlayn kassa Z-hisoboti',
@@ -1372,7 +1378,7 @@ const MC_HINT = { days_open: 'Kunni sanab yoping — ochiq kun bilan davr yopilm
   shortages: 'Direktor qarori: xodim zimmasiga yoki hisobdan chiqarish', fixes: 'Direktor «QT» ro‘yxatida qaror qiladi', z: 'Z-hisobot kiritiladi yoki farq izoh bilan tekshiriladi',
   advances: 'Hisobdorlar avans hisobotini topshiradi yoki qoldiqni qaytaradi', limit: 'Ortiqcha naqd bankka topshirilishi kerak edi (inkassatsiya)',
   unmatched: 'Tushum o‘quvchiga biriktiriladi («To‘lovlar»)', refunds: 'Kassir qaytarishni beradi yoki Direktor bekor qiladi',
-  payroll: 'Vedomost tasdiqlanadi; to‘lanmagan ish haqi keyingi oyga qoldiq bo‘lib o‘tadi', snapshot: 'Direktor oy oxiri suratini oladi', lock: 'Surat bilan birga davr yopiladi' };
+  payroll: 'Vedomost davr yopilishidan OLDIN tasdiqlanadi — yopilgan oy vedomosti yuborilmaydi, tasdiqlanmaydi va qayta ochilmaydi (o‘sha oy maoshi berilmay qoladi); to‘lanmagan ish haqi keyingi oyga qoldiq bo‘lib o‘tadi', snapshot: 'Direktor oy oxiri suratini oladi', lock: 'Surat bilan birga davr yopiladi' };
 const MC_LVL = { block: 'bad', warn: 'warn', info: 'info', ok: 'ok' };
 const RUN_ST = { none: 'tuzilmagan', draft: 'qoralama', submitted: 'tasdiqqa yuborilgan', approved: 'tasdiqlangan', returned: 'qaytarilgan' };
 export function monthCheckRows(mc) {
@@ -1414,7 +1420,7 @@ async function openPeriodForm() {
   const items = L.items || [], today = L.today || (ST.ov && ST.ov.state && ST.ov.state.today) || '';
   const def = prevMonthEnd(today);
   // F2.8: oy oxiri ro'yxati (server 18-reliz va undan keyin) — oxirgi 7 oy, standart — o'tgan oy
-  const mcOk = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 18, mOpts = [];
+  const sv = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0), mcOk = sv >= 18, mOpts = [];
   for (let y = +String(today).slice(0, 4), mo = +String(today).slice(5, 7), i = 0; i < 7 && y > 2000; i++) { mOpts.push(`${y}-${String(mo).padStart(2, '0')}`); if (--mo < 1) { mo = 12; y--; } }
   const mcHtml = mcOk && mOpts.length > 1 ? `<div style="margin-top:12px"><b>Oy oxiri ro‘yxati</b>
       <div class="small muted" style="margin-top:2px">Davrni yopishdan oldin: kunlar yopilgan va tekshirilgan, oylik komissiya inventarizatsiyasi (INV-16), kamomad qarorlari, Z-hisobot, avanslar, biriktirilmagan tushumlar, vedomost.</div>
@@ -1429,7 +1435,7 @@ async function openPeriodForm() {
       <div class="small muted" style="margin-top:2px;overflow-wrap:anywhere" title="${esc(x.hash)}">xesh: ${esc(String(x.hash).slice(0, 16))}…</div></div>`).join('');
   $('#modal').innerHTML = `<div class="modal-h"><h3>Davr surati va qulfi</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
-      <div class="small" id="kpd-lock" style="background:#eef3f1;border-radius:10px;padding:10px 12px;font-weight:600">${L.lockedThrough ? `Davr <b>${esc(dmy(L.lockedThrough))}</b> gacha yopilgan — shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.` : 'Davr yopilmagan: orqaga sanali yozuvlar cheklanmagan (to‘lovda — 31 kungacha).'}</div>
+      <div class="small" id="kpd-lock" style="background:#eef3f1;border-radius:10px;padding:10px 12px;font-weight:600">${L.lockedThrough ? `Davr <b>${esc(dmy(L.lockedThrough))}</b> gacha yopilgan — shu sanagacha ${esc(lockScope(sv))}.` : 'Davr yopilmagan: orqaga sanali yozuvlar cheklanmagan (to‘lovda — 31 kungacha).'}</div>
       ${mcHtml}
       ${m.director ? `<div style="margin-top:12px"><b>Yangi surat</b>
         <div class="small muted" style="margin-top:2px">Davr oxiridagi holat saqlanadi: o‘quvchilar bo‘yicha qarzdorlik va avanslar, biriktirilmagan tushumlar, kassa qoldig‘i, to‘lanmagan ish haqi. Surat keyin o‘zgarmaydi. Yil yakuni — 31-dekabr holati, yanvar yozuvlari boshlanguncha olinadi.</div>
@@ -1459,7 +1465,7 @@ async function openPeriodForm() {
     const lb = $('#kpd-mc-lock');
     if (lb) lb.onclick = async () => {
       const w = rows.filter(r => r.level === 'warn').map(r => `• ${r.label}: ${r.value}`);
-      if (!confirm(`${mName} yopilsinmi?\n\n${dmy(mc.to)} kuni oxiridagi holat surati olinadi va davr ${dmy(mc.to)} gacha YOPILADI: shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.${w.length ? `\n\nDiqqat — ogohlantirishlar (izoh bilan qabul qilinadi):\n${w.join('\n')}` : ''}`)) return;
+      if (!confirm(`${mName} yopilsinmi?\n\n${dmy(mc.to)} kuni oxiridagi holat surati olinadi va davr ${dmy(mc.to)} gacha YOPILADI: shu sanagacha ${lockScope(sv)}.${w.length ? `\n\nDiqqat — ogohlantirishlar (izoh bilan qabul qilinadi):\n${w.join('\n')}` : ''}`)) return;
       lb.disabled = true;
       try { await call('fin_snapshot_take', { p: { asOf: mc.to, note: `${mName} yakuni`, lock: true } });
         C.toast(`${mName} yopildi ✓`); await reload().catch(() => {}); if (C.onChange) C.onChange(); await openPeriodForm(); }
@@ -1472,7 +1478,7 @@ async function openPeriodForm() {
   const take = $('#kpd-take');
   if (take) take.onclick = async () => {
     if (!day.value) { C.toast('Sanani tanlang', true); return; }
-    if (!confirm(`${dmy(day.value)} kuni oxiridagi holat surati olinsinmi?${lk.checked ? `\n\nDavr ${dmy(day.value)} gacha YOPILADI: shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.` : ''}`)) return;
+    if (!confirm(`${dmy(day.value)} kuni oxiridagi holat surati olinsinmi?${lk.checked ? `\n\nDavr ${dmy(day.value)} gacha YOPILADI: shu sanagacha ${lockScope(sv)}.` : ''}`)) return;
     take.disabled = true;
     try { const r = await call('fin_snapshot_take', { p: { asOf: day.value, note: $('#kpd-note').value.trim(), lock: !!lk.checked } });
       C.toast(`Surat olindi ✓${r.late ? ' (kechikib — keyingi kunlar harakati aralashgan bo‘lishi mumkin)' : ''}`); await reload().catch(() => {}); if (C.onChange) C.onChange(); await openPeriodForm(); }

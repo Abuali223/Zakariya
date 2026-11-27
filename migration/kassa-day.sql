@@ -2174,6 +2174,7 @@ grant execute on function public.kassa_pay_sheet(text, int) to authenticated;
 --     unmatched    — kuni shu oyga tushgan, o'quvchiga biriktirilmagan tushumlar;
 --     refunds      — Direktor tasdiqlagan, kassadan hali berilmagan qaytarishlar;
 --     payroll      — shu oy vedomosti holati va tasdiqlangan vedomostlar bo'yicha shu oygacha to'lanmagan ish haqi (soni va summasi);
+--                    tasdiqlash rejimidagi tugagan oy vedomosti tasdiqlanmagan — warn (davr yopilgach u o'zgarmaydi; reliz 19);
 --     snapshot     — oy oxiri surati (fin_snapshots, "asOfDay" = oy oxiri);  lock — davr qulfi oy oxirigacha.
 --   Sinov kassasida pul jadvallari bandlari (z, unmatched, payroll, snapshot, lock) — yo'q, block ham yo'q (davr qulfi sinov kassasiga
 --   qaramaydi). ready / readyWhy — davrni oy oxirigacha yopish mumkinmi (app.fin_lock_ready: barcha haqiqiy kassalar); canLock — oy
@@ -2184,7 +2185,7 @@ language plpgsql stable security definer set search_path = public, app, pg_temp 
 declare
   v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today(); v_m text; v_from date; v_to date;
   v_test boolean; v_lock date; v_limit numeric; v_ended boolean; v_items jsonb := '[]'::jsonb; v_days jsonb; v_n int; v_s numeric;
-  v_did text; v_last date; v_kind text; v_cnt text; v_snap jsonb; v_run text; v_ready boolean := false; v_why text; v_asof date;
+  v_did text; v_last date; v_kind text; v_cnt text; v_snap jsonb; v_run text; v_ready boolean := false; v_why text; v_asof date; v_pfrom text;
 begin
   if not (app.is_admin() or app.fin_list2()) then
     raise exception 'Ruxsat yo''q: oy oxiri ro''yxati — Direktor va 2-ro''yxat (Moliya menejeri, buxgalter)' using errcode = '42501';
@@ -2275,14 +2276,20 @@ begin
   if not v_test then
     -- vedomost va to'lanmagan ish haqi (tasdiqlangan vedomostlar, shu oygacha; davr surati bilan bir xil qoida)
     select r.status into v_run from public.payroll_runs r where r.id = v_m;
+    select nullif(btrim(coalesce(c."payrollApprovalFrom", '')), '') into v_pfrom from public.config c where c.id = 'finance';
     select count(*), coalesce(sum(x.payable - x.paid), 0) into v_n, v_s
       from (select coalesce(l.payable, 0) as payable,
                    coalesce((select sum(coalesce(sp.paid, 0)) from public.salary_payments sp where sp."teacherId" = l."personId" and sp.month = l."runId"), 0) as paid
               from public.payroll_lines l join public.payroll_runs r on r.id = l."runId"
              where r.status = 'approved' and l."runId" <= v_m) x
      where x.payable - x.paid <> 0;
+    -- F2.8 (2-qism, reliz 19): davr yopilgach shu oy vedomosti yuborilmaydi, tasdiqlanmaydi va qayta ochilmaydi (fin-period.sql:
+    --   app.fin_lock_payroll) — tasdiqlash rejimidagi (payrollApprovalFrom dan) tugagan oy vedomosti tasdiqlanmagan bo'lsa — ogohlantirish.
     v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'payroll', 'run', coalesce(v_run, 'none'), 'n', v_n, 'sum', v_s,
-      'level', case when v_run = 'approved' and v_n = 0 then 'ok' else 'info' end));
+      'approvalFrom', v_pfrom,
+      'level', case when v_run = 'approved' and v_n = 0 then 'ok'
+                    when v_ended and v_pfrom is not null and v_m >= v_pfrom and v_run is distinct from 'approved' then 'warn'
+                    else 'info' end));
     -- oy oxiri surati va davr qulfi
     select jsonb_build_object('id', s.id, 'version', s.version, 'late', s.late, 'takenAt', s."createdAt") into v_snap
       from public.fin_snapshots s where s."asOfDay" = v_to order by s.version desc limit 1;

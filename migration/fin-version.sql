@@ -69,8 +69,14 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --     18 — 2-bosqich F2.8 (1-qism): komissiya inventarizatsiyasi (INV-16) — kassa_day_close inv (oylik / yillik sanash, komissiya majburiy,
 --          qat'iy hisobdagi blankalar: app.kassa_blanks), kassa_handover mol (moddiy javobgar shaxs almashganda), cash_counts /
 --          cash_handovers "molChange" va blanks, kassa_day_json.invKind; kassa_month_check — oy oxiri ro'yxati; kassa_checks.invMissing.
+--     19 — 2-bosqich F2.8 (2-qism): davr qulfi barcha pul jadvallariga (fin-period.sql): hisob-fakturalar (app.fin_lock_invoices —
+--          hisoblanish kuni oyning 1-kuni: yangi faktura, o'chirish, summa / chegirma / imtiyoz / kasallik / oy / o'quvchi / oraliq,
+--          bekor qilish; to'lov qo'llanishi — yo'q), avans harakatlari (app.fin_lock_credit — "at" server vaqti, yopilgan davr yozuvi
+--          o'zgarmaydi), qaytarishlar (app.fin_lock_refunds — pul maydonlari), oylik vedomost (app.fin_lock_payroll — hisoblanish kuni
+--          oyning oxirgi kuni); app.fin_lock_hit; triggerlar trg_fin_zlock (invoices, credit_ledger, refunds, payroll_runs, payroll_lines);
+--          kassa_month_check — tasdiqlanmagan vedomost ogohlantirishi (payroll.approvalFrom).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 18 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 19 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

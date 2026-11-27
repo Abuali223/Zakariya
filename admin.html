@@ -1568,6 +1568,10 @@ const KASSA_HOLD_TXT='<b>Kassa to‘xtatilgan</b> (yoki qayta ishga tushirish ku
 function finLockMin(){ const l=KASSA.state&&KASSA.state.lockedThrough; if(!l||!/^\d{4}-\d{2}-\d{2}$/.test(String(l))) return '';
   return new Date(Date.parse(String(l)+'T00:00:00Z')+864e5).toISOString().slice(0,10); }
 const finLockAttr=()=>{ const m=finLockMin(); return m?` min="${esc(m)}"`:''; };
+// F2.8 (2-qism): hisob-faktura oyi yopilgan davrdami (oyning 1-kuni qulf sanasigacha) — yaratish, qayta hisoblash, bekor qilish va
+//   o'chirish server tomonda rad etiladi (fin-period.sql: app.fin_lock_invoices); to'lov qabul qilish — mumkin.
+function finMonthLocked(month){ const l=KASSA.state&&KASSA.state.lockedThrough;
+  return !!(l && /^\d{4}-\d{2}-\d{2}$/.test(String(l)) && /^\d{4}-\d{2}$/.test(String(month||'')) && (String(month)+'-01')<=String(l)); }
 function kassaQueue(){
   if(APPROVAL_QUEUES.some(q=>q.key==='kassa')) return;
   APPROVAL_QUEUES.push({ key:'kassa', title:'Kassa: chiqim va kirim so‘rovlari', roles:['director','finance_mgr','accountant'],
@@ -12699,7 +12703,7 @@ async function renderPayments(){
       <label>&nbsp;<button class="btn ghost2" id="pm-recalc" style="width:100%" title="Narx/ball/kasal o‘zgargan bo‘lsa, kutilayotgan (to‘lanmagan) hisoblarni yangilaydi">↻ Qayta hisoblash</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-clear" style="width:100%" title="Shu oyning TO‘LANMAGAN (kutilayotgan) hisob-fakturalarini o‘chiradi — to‘langan/qismanlarga tegmaydi">🗑 To‘lanmaganlarni tozalash</button></label>
       <label>&nbsp;<button class="btn ghost2" id="pm-audit" style="width:100%" title="Har o‘quvchida real to‘lov = hisob-faktura + avans ekanini tekshiradi (takror hisoblangan avans / nomutanosiblikni topadi)">🔍 Moliya tekshiruvi</button></label>`:''}
-    </div>${SESSION.isAdmin?`<div class="small muted" id="pm-genmsg" style="margin-top:8px"></div>`:(accRO()?'':`<div class="small muted" style="margin-top:8px">Hisob-fakturalarni yaratish/qayta hisoblash — administrator vazifasi. Bu yerda to‘lovlarni ko‘rasiz va naqd to‘lovni belgilaysiz.</div>`)}</div>
+    </div>${SESSION.isAdmin?`<div class="small" id="pm-lockmsg" style="display:none;margin-top:8px;background:#F2F4F7;color:#475467;border-radius:10px;padding:8px 12px;font-weight:600"></div><div class="small muted" id="pm-genmsg" style="margin-top:8px"></div>`:(accRO()?'':`<div class="small muted" style="margin-top:8px">Hisob-fakturalarni yaratish/qayta hisoblash — administrator vazifasi. Bu yerda to‘lovlarni ko‘rasiz va naqd to‘lovni belgilaysiz.</div>`)}</div>
     <div class="ph-actions" style="margin-bottom:12px">
       <input id="pm-search" class="search-inp" placeholder="${accRO()?'Qidiruv: ism yoki ID…':'Qidiruv: ism, ID yoki telefon…'}" autocomplete="off">
       <select id="pm-fgrade" class="search-inp" style="max-width:160px"><option value="">Barcha sinflar</option>${[0,1,2,3,4,5,6,7,8,9,10,11].map(g=>`<option value="${g}">${gradeName(g)}</option>`).join('')}<option value="13">Variativ</option></select>
@@ -12719,6 +12723,9 @@ async function renderPayments(){
   const load=async()=>{
     const month=$('#pm-month').value; if(!month){ return; }
     const _g=VIEW_GEN;
+    { const lk=finMonthLocked(month), lm=$('#pm-lockmsg');   // yopilgan oy: faktura yozish amallari o'chadi (server ham rad etadi)
+      ['#pm-gen','#pm-recalc','#pm-clear'].forEach(id=>{ const b=$(id); if(b && !b.dataset.busy) b.disabled=lk; });
+      if(lm){ lm.style.display=lk?'':'none'; lm.textContent=lk?`🔒 ${month} — yopilgan davr (${fmtDayUz(KASSA.state.lockedThrough)} gacha yopilgan): hisob-fakturalar yaratilmaydi, qayta hisoblanmaydi, bekor qilinmaydi va o‘chirilmaydi. To‘lov qabul qilish mumkin. Tuzatish — joriy oy hujjati bilan; zarur bo‘lsa Direktor «Kassa» → «Davr»da davrni sababi bilan qayta ochadi.`:''; } }
     $('#pm-body').innerHTML=`<div class="card"><div class="loading">Yuklanmoqda…</div></div>`;
     let rows;
     try{ const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month))); rows=snap.docs.map(d=>({_id:d.id,...d.data()})); }
@@ -12901,9 +12908,9 @@ async function renderPayments(){
         <button class="btn sm ghost2" data-hist="${esc(r.studentId||'')}" title="To‘lov / avans tarixi">📋</button>
         ${paidOf(r)>0&&!accRO()?`<button class="btn sm ghost2" data-receipt="${esc(r._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`:''}
         ${r.status!=='paid'&&!isCanc(r)&&!accRO()?`<button class="btn sm gold" data-pay="${esc(r._id)}" title="To‘lov qabul qilish — Naqd / Bank / Terminal (qarz oldindan to‘ldiriladi)">💵 To‘lov</button>`:''}
-        ${((SESSION.isAdmin||SESSION.role==='finance_mgr'||SESSION.role==='treasurer') && r.status==='pending')?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
+        ${((SESSION.isAdmin||SESSION.role==='finance_mgr'||SESSION.role==='treasurer') && r.status==='pending' && !finMonthLocked(r.month))?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         ${(SESSION.isAdmin && (r.status==='paid'||r.status==='partial') && paidOf(r)>0)?`<button class="btn sm ghost2" data-refund="${esc(r._id)}" title="To‘lovni qaytarish — summa + sabab + direktor paroli">↩ Qaytarish</button>`:''}
-        ${(SESSION.isAdmin && !(r.status==='paid'||r.status==='partial'))?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}
+        ${(SESSION.isAdmin && !(r.status==='paid'||r.status==='partial') && !finMonthLocked(r.month))?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}
       </div></td></tr>`; };
     const trs=Object.keys(byCls).sort(clsSort).map(k=>{ const gp=byCls[k]; gp.rows.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
       const gpDebt=gp.rows.reduce((s,r)=>s+debtOf(r),0), gpColl=gp.rows.reduce((s,r)=>s+(isCanc(r)?0:paidOf(r)),0);
@@ -13012,13 +13019,13 @@ async function renderPayments(){
   if($('#pm-gen')) $('#pm-gen').addEventListener('click',async()=>{
     const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
     if(!month){ toast('Oyni tanlang',true); return; }
-    const btn=$('#pm-gen'); btn.disabled=true; btn.textContent='Yaratilmoqda…';
+    const btn=$('#pm-gen'); btn.disabled=true; btn.dataset.busy='1'; btn.textContent='Yaratilmoqda…';
     try{
       // --- Chegirma dvigateli konteksti (narx, maxfiy maydonlar, kasal kun, aka-uka, referral) ---
       const { privOf, conflicts, ctx, ledger, priceEmpty, refOpts } = await pmLoadCtx(month, students, amount);
-      if(priceEmpty && amount<=0){ toast('Narx jadvali bo‘sh. «Narx jadvali»ni to‘ldiring yoki zaxira summani kiriting.',true); btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish'; return; }
+      if(priceEmpty && amount<=0){ toast('Narx jadvali bo‘sh. «Narx jadvali»ni to‘ldiring yoki zaxira summani kiriting.',true); delete btn.dataset.busy; btn.disabled=finMonthLocked($('#pm-month').value); btn.textContent='Hisob-fakturalar yaratish'; return; }
       // Hali tasdiqlanmagan chegirma so'rovlari / to'langan tavsiyalar shu oy fakturasiga ta'sir qilishi mumkin (D1) — ogohlantiramiz.
-      { const warn=await billingPendingWarn(month, students); if(warn && !confirm(warn)){ btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish'; return; } }
+      { const warn=await billingPendingWarn(month, students); if(warn && !confirm(warn)){ delete btn.dataset.busy; btn.disabled=finMonthLocked($('#pm-month').value); btn.textContent='Hisob-fakturalar yaratish'; return; } }
       const { existRef, pendingRef, unit:refUnit } = pmReferralMaps(students, privOf, ledger, month, refOpts);
       // Mavjud hisoblarni tekshiramiz (paid/qisman'ni buzmaymiz, dublikat yaratmaymiz)
       const snap=await getDocs(query(collection(db,'invoices'), where('month','==',month)));
@@ -13088,7 +13095,7 @@ async function renderPayments(){
       $('#pm-genmsg').innerHTML = html;
       toast('Tayyor ✓'); load();
     }catch(e){ toast('Xatolik: '+errMsg(e),true); }
-    btn.disabled=false; btn.textContent='Hisob-fakturalar yaratish';
+    delete btn.dataset.busy; btn.disabled=finMonthLocked($('#pm-month').value); btn.textContent='Hisob-fakturalar yaratish';
   });
   if($('#pm-recalc')) $('#pm-recalc').addEventListener('click',async()=>{
     const month=$('#pm-month').value, amount=Number(($('#pm-amount').value||'').replace(/\D/g,''))||0;
@@ -13097,7 +13104,7 @@ async function renderPayments(){
     //   o'zgargan yoki o'quvchi sinfdan sinfga o'tgan bo'lsa, eski oyning to'lanmagan hisoblari yangi narx bilan qayta yoziladi.
     if(month<curMonth() && !confirm(`DIQQAT: ${month} — o‘tgan oy.\n\nQayta hisoblash BUGUNGI narx jadvali va o‘quvchilarning HOZIRGI sinfi bilan bajariladi. O‘sha oydan keyin narx o‘zgargan yoki o‘quvchi boshqa sinfga o‘tgan bo‘lsa, o‘tgan oyning to‘lanmagan hisoblari YANGI narx bilan qayta yoziladi.\n\nFaqat o‘sha oyning narxi va sinflari hozir ham bir xil ekaniga ishonchingiz komil bo‘lsa davom eting. Davom etilsinmi?`)) return;
     if(!confirm('Bu oydagi KUTILAYOTGAN, QISMAN to‘langan va «Grant / 0 so‘m» (naqd kelmagan) hisob-fakturalar narx va chegirma (kasal kun, referral, monitoring, aka-uka…) bo‘yicha qayta hisoblanadi.\nHAQIQATAN to‘langan (naqd tushgan) hisoblar narxi oshsa tegilmaydi — qarz tiklanmaydi; narxi KAMAYGANlari alohida so‘raladi (farq avansga). Chegirma/grant olib tashlangan o‘quvchi to‘liq narxga qaytadi. Davom etilsinmi?')) return;
-    const btn=$('#pm-recalc'); btn.disabled=true; btn.textContent='Hisoblanmoqda…';
+    const btn=$('#pm-recalc'); btn.disabled=true; btn.dataset.busy='1'; btn.textContent='Hisoblanmoqda…';
     try{
       const { privOf, ctx, ledger, conflicts, famBill, refOpts } = await pmLoadCtx(month, students, amount);
       const { existRef, pendingRef, unit:refUnit } = pmReferralMaps(students, privOf, ledger, month, refOpts);
@@ -13206,7 +13213,7 @@ async function renderPayments(){
       $('#pm-genmsg').textContent=`${changed} ta hisob-faktura qayta hisoblandi${avans?` · ${avans} tasida ortiqcha to‘lov avansga o‘tdi`:''}${canceledN?` · ${canceledN} tasi holat bo‘yicha bekor qilindi`:''}${(toCancel.length&&!doCancel)?` · ${toCancel.length} ta holat bo‘yicha bekor qilinmadi (siz rad etdingiz)`:''}${review.length?` · ⚠️ ${review.length} tasiga TEGILMADI — holati shubhali (sana yo‘q yoki o‘tgan oy uchun joriy holat ishonchsiz): ${review.slice(0,6).map(x=>x.name+' — '+x.reason).join('; ')}${review.length>6?' …':''}. Kerak bo‘lsa sanani kiriting yoki qo‘lda bekor qiling`:''}${guardSkip?` · ${guardSkip} tasi o‘tkazildi (shu orada to‘langan/yopilgan — to‘lov saqlandi)`:''}${skipped?` · ${skipped} o‘tkazildi (narx/kontrakt yo‘q)`:''}${decN?` · ${decN} ta to‘langan fakturada narx kamaydi — ${fmtSom(decSum)} avansga qaytdi`:''}${(dec.length&&!doDec)?` · ${dec.length} ta to‘langan fakturada narx kamaygan, lekin tegilmadi (siz rad etdingiz)`:''}${decInfo.length?` · ℹ️ ${decInfo.length} ta TO‘LANGAN fakturada yangi narx pastroq, lekin avtomatik qaytarilmadi (2 farzandli oila yoki boshqa chegirma o‘zgargan — qo‘lda tekshiring): ${decInfo.slice(0,6).map(x=>`${x.name} ${fmtSom(x.paid)} → ${fmtSom(x.net)}`).join('; ')}${decInfo.length>6?' …':''}`:''}${(conflicts&&conflicts.length)?` · ℹ️ Aka-uka: ${conflicts.slice(0,8).join(' · ')}${conflicts.length>8?' …':''}`:''}${sickCarryN?` · ℹ️ ${sickCarryN} tasida kasal kunlarning bir qismi fakturaga sig‘madi — keyingi fakturada ayiriladi (o‘quvchi ketgan bo‘lsa: «Tasdiqlash» → «Bemor kunlari» → «Avansga qaytarish»)`:''}${sickLostL.length?` · ⚠️ ${sickLostL.length} tasida kasal kun summasi fakturadan katta — ortig‘i qoplanmadi (eski qoida, «Bemor» kunlari keyingi oyga o‘tmaydi; o‘tish oyini belgilang yoki farqni avansga qo‘shing): ${sickLostL.slice(0,6).join('; ')}${sickLostL.length>6?' …':''}`:''}.`;
       toast('Qayta hisoblandi ✓'); load();
     }catch(e){ toast('Xatolik: '+errMsg(e),true); }
-    btn.disabled=false; btn.textContent='↻ Qayta hisoblash';
+    delete btn.dataset.busy; btn.disabled=finMonthLocked($('#pm-month').value); btn.textContent='↻ Qayta hisoblash';
   });
   // Shu oyning TO'LANMAGAN (pending) hisob-fakturalarini o'chirish — to'langan/qisman/bekorlarga TEGMAYDI (pul saqlanadi).
   if($('#pm-clear')) $('#pm-clear').addEventListener('click',async()=>{
@@ -13217,7 +13224,7 @@ async function renderPayments(){
     if(!all.length){ toast(`${month} uchun hisob-faktura yo‘q.`,true); return; }
     if(!pend.length){ toast(`${month}: to‘lanmagan hisob-faktura yo‘q. ${kept} ta to‘langan/qisman/bekor — tegilmaydi.`,true); return; }
     if(!confirm(`${month} oyi uchun ${pend.length} ta TO‘LANMAGAN (kutilayotgan) hisob-faktura o‘chiriladi.${kept?`\n\n${kept} ta to‘langan/qisman/bekor hisob-faktura TEGILMAYDI (pul saqlanadi).`:''}\n\nPul oqimiga ta’sir qilmaydi (bu hisoblarda to‘lov yo‘q). Davom etilsinmi?`)) return;
-    const cb=$('#pm-clear'); cb.disabled=true; cb.textContent='O‘chirilmoqda…';
+    const cb=$('#pm-clear'); cb.disabled=true; cb.dataset.busy='1'; cb.textContent='O‘chirilmoqda…';
     // Har biri qulf ostida qayta tekshiriladi (delete_unpaid_invoice) — ro'yxat o'qilgandan keyin to'langani o'chmaydi.
     let done=0, raced=0, legacyDel=false;
     for(const inv of pend){ try{
@@ -13225,7 +13232,7 @@ async function renderPayments(){
         await deleteDoc(doc(db,'invoices',inv._id)); done++; }catch(e){} }
     if($('#pm-genmsg')) $('#pm-genmsg').textContent=`${done} ta to‘lanmagan hisob-faktura o‘chirildi${kept?` · ${kept} ta to‘langan/qisman tegilmadi`:''}${raced?` · ${raced} tasiga shu orada to‘lov tushgan — saqlandi`:''}.`;
     toast(`${done} ta to‘lanmagan hisob-faktura o‘chirildi ✓`);
-    cb.disabled=false; cb.textContent='🗑 To‘lanmaganlarni tozalash'; load();
+    delete cb.dataset.busy; cb.disabled=finMonthLocked($('#pm-month').value); cb.textContent='🗑 To‘lanmaganlarni tozalash'; load();
   });
   $('#pm-month').addEventListener('change',load);
   if($('#pm-audit')) $('#pm-audit').addEventListener('click',openFinanceAudit);

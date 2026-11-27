@@ -10,6 +10,8 @@
 //      oynasida dalolatnoma nomi.
 //   4) Direktor: «Davr» → «Oy oxiri ro'yxati»: joriy oy — oldindan ko'rish (INV joyida, «Oy hali tugamagan», yopish tugmasi yo'q); o'tgan oy —
 //      «Oy oxiri surati va davrni … gacha yopish» → tasdiq → surat va qulf (bazada); moliya menejeri — ro'yxat bor, yopish tugmasi yo'q.
+//   4b) Direktor, «To'lovlar» (F2.8, 2-qism — reliz 19): joriy oy ochiq; yopilgan o'tgan oy — 🔒 izoh, faktura yaratish / qayta hisoblash /
+//      tozalash tugmalari o'chiq.
 //   5) Telefon ekrani (390 px) — «Davr» oynasi; sahifa xatolari yo'q.
 //   Yangi stend bilan (bash stand.sh reset dev):  node scenarios/e2e-kassa22.cjs
 const E = require('../lib/common.cjs'); const fs = require('fs');
@@ -154,6 +156,18 @@ const dm = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
       && lk === pme && sn.startsWith(`${pme.slice(5) === '12-31' ? 'year_end' : 'month_end'}|${pme}|`) && sn.endsWith(' yakuni'), [dir.dialogs.slice(dl1), lk, sn]);
   await dir.pg.screenshot({ path: `${OUT}/inv-period-${UI}-1440.png`, fullPage: true });
   await dir.pg.click('#m-cancel').catch(() => {}); await dir.modalGone().catch(() => {});
+  // ---------------- 4b) «To'lovlar» (F2.8, 2-qism): yopilgan oy — 🔒 izoh, faktura yaratish / qayta hisoblash / tozalash o'chiq; joriy oy — ochiq
+  await dir.tab('payments'); await dir.pg.waitForSelector('#pm-month', { timeout: 15000 });
+  await dir.pg.waitForFunction(() => document.querySelector('#pm-body') && !document.querySelector('#pm-body .loading'), null, { timeout: 15000 }).catch(() => {});
+  const pmState = async () => dir.pg.evaluate(() => { const m = document.querySelector('#pm-lockmsg');
+    return { msg: m ? m.textContent : '', shown: !!m && getComputedStyle(m).display !== 'none', dis: ['#pm-gen', '#pm-recalc', '#pm-clear'].map(s => !!(document.querySelector(s) || {}).disabled) }; });
+  const pmCur = await pmState();
+  await dir.pg.$eval('#pm-month', (e, v) => { e.value = v; e.dispatchEvent(new Event('change')); }, ymP);
+  await dir.pg.waitForFunction(() => { const e = document.querySelector('#pm-lockmsg'); return e && getComputedStyle(e).display !== 'none'; }, null, { timeout: 15000 }).catch(() => {});
+  const pmOld = await pmState();
+  ok('«To‘lovlar»: joriy oy — ochiq (izoh yo‘q, tugmalar faol); yopilgan o‘tgan oy — 🔒 izoh (qulf sanasi, to‘lov qabul qilinadi), faktura yaratish / qayta hisoblash / tozalash o‘chiq',
+    !pmCur.shown && pmCur.dis.every(x => !x) && pmOld.shown && pmOld.msg.includes(`🔒 ${ymP} — yopilgan davr (${dm(pme)} gacha yopilgan)`)
+      && pmOld.msg.includes('To‘lov qabul qilish mumkin') && pmOld.dis.every(Boolean), [pmCur, pmOld]);
 
   // ---------------- 5) moliya menejeri: ro'yxat bor, yopish tugmasi yo'q; telefon ekrani
   const mol = await login(ids.R_MOL, { width: 390, height: 844 });

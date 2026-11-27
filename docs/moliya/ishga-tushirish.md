@@ -341,6 +341,13 @@ sharti bajarilgach parallel yuritishni tugatish qarorini Direktor imzolaydi (Sh-
    Oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi; oy kunlaridan biri hali bog‘lanmagan «hali o‘tkazilmagan»
    yozuvlar — kech kirim orderi kelmagan qurilma navbati yozuvi yoki «Қ» blankalari — bilan yopilgan va tekshirilmagan bo‘lsa ham:
    avval navbat yuboriladi, qolganini 2-ro‘yxat kunni izoh bilan tekshirib tasdiqlaydi.
+   **Oy vedomosti davr yopilishidan oldin tasdiqlanadi** (ro‘yxatda tasdiqlanmagan vedomost — ogohlantirish). Davr yopilgach (reliz 19)
+   shu sanagacha: to‘lov, xarajat, maosh, xodim avansi, qaytarish va o‘quvchi avansi yozuvlari kiritilmaydi va o‘zgartirilmaydi (avans
+   harakati sanasi — server vaqti, orqa sana bilan yozilmaydi); o‘sha oylar hisob-fakturalari yaratilmaydi, qayta hisoblanmaydi, bekor
+   qilinmaydi va o‘chirilmaydi («To‘lovlar» sahifasida oy yonida 🔒 belgisi, tugmalar o‘chadi) — eski qarzga to‘lov esa qabul qilinadi
+   (u bugungi pul hodisasi); oylik vedomost yuborilmaydi, tasdiqlanmaydi, qaytarilmaydi va qayta ochilmaydi. Tuzatish — joriy oy hujjati
+   bilan; zarur bo‘lsa Direktor «Davr»da davrni sababi bilan qayta ochadi va amaldan keyin qayta yopadi. Server (to‘lov tizimlari
+   webhook’lari) qulfga qaramaydi.
 
 ## 8. Favqulodda holatlar
 | Holat | Nima qilinadi |

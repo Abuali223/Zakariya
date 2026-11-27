@@ -19,7 +19,8 @@ do $iqror_guard$ begin raise exception 'iqror: fin-period.sql ALOHIDA ishga tush
 --   xarajatlari, maosh to'lovlari, xodim avanslari (yangi yozuv, o'zgartirish, o'chirish). Kassa hujjatlari doim bugungi kunga yoziladi — ularga qulf kerak emas; lekin:
 --   davr faqat shu sanagacha bo'lgan kassa kunlari yopilgan bo'lsa yopiladi (app.fin_lock_ready), yopilgan davrdagi kassa kuni
 --   qayta ochilmaydi va birinchi kassa kuni yopilgan davrga qo'yilmaydi (kassa-day.sql: kassa_day_reopen, kassa_opening_set).
---   Barcha pul jadvallari uchun oy qulfi — 2-bosqich (F2.8).
+--   F2.8 (2-qism, reliz 19): hisob-fakturalar (hisoblanish maydonlari va bekor qilish; to'lov qo'llanishi — yo'q), avans (kredit)
+--   harakatlari, qaytarishlar va oylik vedomost ham (pastda: app.fin_lock_invoices / _credit / _refunds / _payroll).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 
@@ -200,6 +201,131 @@ do $$ declare t text; begin
   foreach t in array array['expenses', 'salary_payments', 'staff_advances'] loop
     execute format('drop trigger if exists trg_fin_zlock on public.%I', t);
     execute format('create trigger trg_fin_zlock before insert or update or delete on public.%I for each row execute function app.fin_lock_rows()', t);
+  end loop;
+end $$;
+
+-- ---------- F2.8 (2-qism): barcha pul jadvallari uchun oy qulfi (tizim — server / webhook — mustasno) ----------
+--   Yopilgan davr surati (fin_snapshot_data: qarzdorlik, avans, to'lanmagan ish haqi, berilmagan qaytarishlar) keyin jim o'zgarmasin:
+--   hisob-fakturalar — hisoblanish kuni oyning 1-kuni (faktura oy boshida hisoblanadi): yopilgan oy fakturasi yozilmaydi va o'chirilmaydi,
+--     summasi, chegirmasi, imtiyozi, kasallik ayirmasi, oyi, o'quvchisi, hisoblash oralig'i o'zgarmaydi, bekor qilinmaydi va bekori
+--     qaytarilmaydi ('canceled' / 'reversed'). To'lov qo'llanishi (paidAmount, holat to'langan / qisman / kutilmoqda, kanal, to'lov
+--     vaqti) — o'sha kungi pul hodisasi (to'lov kuni — o'z qulfi bilan, app.fin_lock_payments): cheklanmaydi;
+--   avans (kredit) harakatlari — credit_ledger."at" kuni: foydalanuvchi yozuvida "at" — server vaqti (orqa sana bilan yozib bo'lmaydi;
+--     ilgari mijoz o'zi berardi), yopilgan davr yozuvi o'zgarmaydi va o'chirilmaydi;
+--   qaytarishlar — refunds."createdAt" kuni (server vaqti, app.fin_server_ts): o'sha davr yozuvining summasi, nishoni, o'quvchisi,
+--     oyi, usuli va kassa hujjati o'zgarmaydi, yozuv o'chirilmaydi (ism / izoh — cheklanmaydi);
+--   oylik vedomost — hisoblanish kuni oyning oxirgi kuni (ish haqi oy oxirida hisoblanadi): yopilgan oy vedomostini yuborish, tasdiqlash,
+--     qaytarish, qayta ochish va qatorlarini o'zgartirish mumkin emas (vedomost davr yopilishidan oldin tasdiqlanadi — oy oxiri
+--     ro'yxatida ogohlantirish).
+--   Server yo'llari (zanjir / migratsiya, webhook, service_role) — app.is_system(): mustasno (masalan kalitlarni kanonlash, maxfiy
+--   kodni yashirish). Foydalanuvchi RPC'lari (security definer bo'lsa ham) — tekshiriladi.
+--   Qulf sozlamasi FOR SHARE bilan o'qiladi (state-7, app.fin_lock_check kabi). Xato — 42501, hint 'fin:locked'; tuzatish — joriy
+--   davr hujjati bilan, zarur bo'lsa Direktor «Davr»da davrni sababi bilan qayta ochadi (fin_period_lock).
+create or replace function app.fin_lock_hit(p_day date) returns date
+language plpgsql volatile security definer set search_path = public, app, pg_temp as $$
+declare v_lock date;
+begin
+  if p_day is null or app.is_system() then return null; end if;
+  select o."lockedThrough" into v_lock from public.fin_org o where o.id = 'main' for share;
+  return case when v_lock is not null and p_day <= v_lock then v_lock end;
+end $$;
+revoke all on function app.fin_lock_hit(date) from public, anon, authenticated;
+
+create or replace function app.fin_lock_invoices() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_d date; v_lock date; v_m text;
+begin
+  if tg_op = 'UPDATE'
+     and (new.amount, new."baseAmount", new.discount, new."isGrant", new."pctApplied", new."sickAmount", new."sickDaysApplied", new.month,
+          new."studentId", new."billedFrom", new."billedTo", new."priceKey")
+         is not distinct from
+         (old.amount, old."baseAmount", old.discount, old."isGrant", old."pctApplied", old."sickAmount", old."sickDaysApplied", old.month,
+          old."studentId", old."billedFrom", old."billedTo", old."priceKey")
+     and (coalesce(new.status, '') in ('canceled', 'reversed')) = (coalesce(old.status, '') in ('canceled', 'reversed')) then
+    return new;   -- to'lov qo'llanishi va boshqa belgi — hisoblanishni o'zgartirmaydi
+  end if;
+  foreach v_m in array array[case when tg_op <> 'INSERT' then old.month end, case when tg_op <> 'DELETE' then new.month end] loop
+    v_d := app.fin_text_day(v_m || '-01');
+    v_lock := app.fin_lock_hit(v_d);
+    if v_lock is not null then
+      raise exception 'Hisob-faktura (% oyi) yopilgan davrga tegishli (davr % gacha yopilgan): yangi faktura yozilmaydi va o''chirilmaydi, summasi, chegirmasi, oyi, o''quvchisi va bekor qilinishi o''zgarmaydi (to''lov qabul qilish mumkin). Tuzatish — joriy oy hujjati bilan; zarur bo''lsa Direktor «Davr»da davrni sababi bilan qayta ochadi',
+        v_m, to_char(v_lock, 'DD.MM.YYYY') using errcode = '42501', hint = 'fin:locked';
+    end if;
+  end loop;
+  return coalesce(new, old);
+end $$;
+revoke all on function app.fin_lock_invoices() from public, anon, authenticated;
+-- Nomi boshqa pul jadvallaridagi kabi (kassa-checks 3, 8, 23-bandlari). Faktura qo'riqchilari (trg_invoice_*) undan keyin ishlaydi —
+--   ular hisoblanish maydonlarini o'zgartirmaydi (faqat rad etadi; bonus qo'riqchisi "bonusRef" ni tozalaydi), shuning uchun tartib farq qilmaydi.
+drop trigger if exists trg_fin_zlock on public.invoices;
+create trigger trg_fin_zlock before insert or update or delete on public.invoices for each row execute function app.fin_lock_invoices();
+
+create or replace function app.fin_lock_credit() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_t timestamptz; v_lock date;
+begin
+  -- Server vaqti (F0.14 kabi): foydalanuvchi yozuvida "at" — hozir (mijoz orqa sana bera olmaydi), o'zgartirishda — avvalgisi
+  if not app.is_system() then
+    if tg_op = 'INSERT' then new."at" := app.fin_now();
+    elsif tg_op = 'UPDATE' then new."at" := old."at"; end if;
+  end if;
+  foreach v_t in array array[case when tg_op <> 'INSERT' then old."at" end, case when tg_op <> 'DELETE' then coalesce(new."at", app.fin_now()) end] loop
+    v_lock := app.fin_lock_hit((v_t at time zone 'Asia/Tashkent')::date);
+    if v_lock is not null then
+      raise exception 'Avans (kredit) harakati (% kuni) yopilgan davrga tushadi (davr % gacha yopilgan): orqa sana bilan yozilmaydi, o''sha davr yozuvi o''zgarmaydi va o''chirilmaydi; zarur bo''lsa Direktor «Davr»da davrni sababi bilan qayta ochadi',
+        to_char((v_t at time zone 'Asia/Tashkent')::date, 'DD.MM.YYYY'), to_char(v_lock, 'DD.MM.YYYY') using errcode = '42501', hint = 'fin:locked';
+    end if;
+  end loop;
+  return coalesce(new, old);
+end $$;
+revoke all on function app.fin_lock_credit() from public, anon, authenticated;
+drop trigger if exists trg_fin_zlock on public.credit_ledger;
+create trigger trg_fin_zlock before insert or update or delete on public.credit_ledger for each row execute function app.fin_lock_credit();
+
+create or replace function app.fin_lock_refunds() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_t timestamptz; v_lock date;
+begin
+  if tg_op = 'UPDATE'
+     and (new.amount, new.target, new."targetId", new."studentId", new.month, new."createdAt", new.method, new."cashDocId")
+         is not distinct from
+         (old.amount, old.target, old."targetId", old."studentId", old.month, old."createdAt", old.method, old."cashDocId") then
+    return new;   -- ism (maxfiy kodni yashirish), izoh — pul emas
+  end if;
+  foreach v_t in array array[case when tg_op <> 'INSERT' then old."createdAt" end, case when tg_op <> 'DELETE' then coalesce(new."createdAt", app.fin_now()) end] loop
+    v_lock := app.fin_lock_hit((v_t at time zone 'Asia/Tashkent')::date);
+    if v_lock is not null then
+      raise exception 'Qaytarish yozuvi (% kuni) yopilgan davrga tegishli (davr % gacha yopilgan): o''zgartirilmaydi va o''chirilmaydi; zarur bo''lsa Direktor «Davr»da davrni sababi bilan qayta ochadi',
+        to_char((v_t at time zone 'Asia/Tashkent')::date, 'DD.MM.YYYY'), to_char(v_lock, 'DD.MM.YYYY') using errcode = '42501', hint = 'fin:locked';
+    end if;
+  end loop;
+  return coalesce(new, old);
+end $$;
+revoke all on function app.fin_lock_refunds() from public, anon, authenticated;
+drop trigger if exists trg_fin_zlock on public.refunds;   -- nomi «z» bilan: trg_fin_server_ts dan KEYIN ("createdAt" — server vaqti)
+create trigger trg_fin_zlock before insert or update or delete on public.refunds for each row execute function app.fin_lock_refunds();
+
+create or replace function app.fin_lock_payroll() returns trigger
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_m text; v_d date; v_lock date;
+begin
+  foreach v_m in array case when tg_table_name = 'payroll_runs'
+                            then array[case when tg_op <> 'INSERT' then old.id end, case when tg_op <> 'DELETE' then new.id end]
+                            else array[case when tg_op <> 'INSERT' then (to_jsonb(old) ->> 'runId') end, case when tg_op <> 'DELETE' then (to_jsonb(new) ->> 'runId') end] end loop
+    v_d := (app.fin_text_day(left(coalesce(v_m, ''), 7) || '-01') + interval '1 month' - interval '1 day')::date;
+    v_lock := app.fin_lock_hit(v_d);
+    if v_lock is not null then
+      raise exception 'Oylik vedomost (% oyi) yopilgan davrga tegishli (davr % gacha yopilgan): yuborish, tasdiqlash, qaytarish, qayta ochish va qatorlarini o''zgartirish mumkin emas — vedomost davr yopilishidan oldin tasdiqlanadi; zarur bo''lsa Direktor «Davr»da davrni sababi bilan qayta ochadi',
+        left(v_m, 7), to_char(v_lock, 'DD.MM.YYYY') using errcode = '42501', hint = 'fin:locked';
+    end if;
+  end loop;
+  return coalesce(new, old);
+end $$;
+revoke all on function app.fin_lock_payroll() from public, anon, authenticated;
+do $$ declare t text; begin
+  foreach t in array array['payroll_runs', 'payroll_lines'] loop
+    execute format('drop trigger if exists trg_fin_zlock on public.%I', t);
+    execute format('create trigger trg_fin_zlock before insert or update or delete on public.%I for each row execute function app.fin_lock_payroll()', t);
   end loop;
 end $$;
 
