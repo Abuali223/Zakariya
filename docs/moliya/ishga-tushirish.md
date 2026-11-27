@@ -317,8 +317,15 @@ Click / Uzum kabinetlari va bank hujjatlarini ko‘rish imkonini moliya menejeri
 sharti bajarilgach parallel yuritishni tugatish qarorini Direktor imzolaydi (Sh-6).
 
 ## 7. Oy oxiri
-1. Oyning oxirgi ish kuni — komissiya sanashi: kunni Direktor yoki moliya menejeri komissiya ishtirokida yopadi (yopish oynasida
-   komissiya a’zolari kiritiladi — kamida 2 kishi), sanash dalolatnomasi chop etilib imzolanadi.
+1. Oyning oxirgi ish kuni — komissiya inventarizatsiyasi (INV-16; 2-buyruq): kunni Direktor yoki moliya menejeri (yoki kassir)
+   komissiya ishtirokida yopadi — «Kunni yopish» oynasida «Oylik komissiya inventarizatsiyasi (INV-16)» belgilanadi (dekabrda —
+   «Yillik»; belgi oldindan qo‘yilmaydi — oyning oxirgi ish kunida oynada eslatma bor), komissiya a’zolari (rais va kamida 1 a’zo;
+   lavozimlar taklif qilinadi) va kassadagi foydalanilmagan «Қ» blankalari (soni va raqamlari; yo‘q bo‘lsa — 0) kiritiladi. Yopilgach
+   INV-16 dalolatnomasi (kassirning tilxati, oxirgi order raqamlari, nominallar, blankalar, natija, rahbar qarori qatori) chop etilib
+   komissiya va kassir imzolaydi. Moddiy javobgar shaxs almashganda (yangi kassir, uzoq ta’til, ishdan ketish) — «Smena topshirish»
+   oynasida «Moddiy javobgar shaxs almashadi» belgisi bilan (komissiya majburiy, dalolatnoma — INV-16 shaklida); kassir ↔ o‘rinbosar
+   smenasi — oddiy topshirish. O‘tkazilmagan oylik inventarizatsiya nazorat ro‘yxatida («Oylik komissiya inventarizatsiyasi») va oy
+   oxiri ro‘yxatida ko‘rinadi: oxirgi kun hali tekshirilmagan bo‘lsa — Direktor uni qayta ochadi va kun komissiya bilan qayta yopiladi.
 2. Barcha kunlar «Tekshirilgan»; nazorat ro‘yxatida qizil qator yo‘q; `kassa-checks.sql` — «muammo topilmadi».
 3. Yanvar avans hisobotlari (qog‘oz, Sh-1) buxgalterga topshirilgan va «Kassa» → «Avans hisoboti» bilan kiritilgan.
 4. «KO-3» jurnali (oy) chop etilib bosh buxgalter imzolaydi; Excel nusxasi buxgalter dasturiga olinadi (buxgalter va Moliya
@@ -326,9 +333,14 @@ sharti bajarilgach parallel yuritishni tugatish qarorini Direktor imzolaydi (Sh-
    beriladi); jurnal oynasida qoldiqlar mos (ogohlantirish yo‘q).
    «Statiyalar» — oylik statiya matritsasi chop etilib imzolanadi; «Oylik to‘plam (Excel)» (KO-3, statiyalar, kassa kunlari,
    hisobdorlar) buxgalterga topshiriladi.
-5. «Davr» → surat (oy oxiri) → keyingi ish kuni qulf (oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi; oy kunlaridan
-   biri hali bog‘lanmagan «hali o‘tkazilmagan» yozuvlar — kech kirim orderi kelmagan qurilma navbati yozuvi yoki «Қ» blankalari —
-   bilan yopilgan va tekshirilmagan bo‘lsa ham: avval navbat yuboriladi, qolganini 2-ro‘yxat kunni izoh bilan tekshirib tasdiqlaydi).
+5. «Davr» → «Oy oxiri ro‘yxati» (F2.8; Direktor va 2-ro‘yxat): oy tanlanadi — yopilmagan va hali bog‘lanmagan yozuvlar bilan yopilgan
+   kunlar (to‘siq), tekshirilmagan kunlar, oylik komissiya inventarizatsiyasi, qarorsiz kamomad, qaror kutayotgan QT so‘rovlari,
+   Z-hisobot, muddati o‘tgan avans hisobotlari, kassa limitidan oshgan kunlar, biriktirilmagan tushumlar, berilmagan qaytarishlar,
+   vedomost va to‘lanmagan ish haqi, oy oxiri surati va davr qulfi. To‘siq bo‘lmasa Direktor «Oy oxiri surati va davrni … gacha yopish»
+   tugmasi bilan surat oladi va davrni yopadi (ogohlantirishlar tasdiq oynasida sanaladi — tuzatiladi yoki izoh bilan qabul qilinadi).
+   Oyning oxirgi kassa kuni yopilmagan bo‘lsa tizim davrni yopmaydi; oy kunlaridan biri hali bog‘lanmagan «hali o‘tkazilmagan»
+   yozuvlar — kech kirim orderi kelmagan qurilma navbati yozuvi yoki «Қ» blankalari — bilan yopilgan va tekshirilmagan bo‘lsa ham:
+   avval navbat yuboriladi, qolganini 2-ro‘yxat kunni izoh bilan tekshirib tasdiqlaydi.
 
 ## 8. Favqulodda holatlar
 | Holat | Nima qilinadi |

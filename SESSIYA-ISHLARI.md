@@ -3529,6 +3529,42 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   xodimga o'quv yili bo'yicha bitta varaq (kassada saqlanadi).
 
 
+## 94) F2.8 (1-qism) — oylik komissiya inventarizatsiyasi (INV-16), moddiy javobgar almashganda topshirish, oy oxiri ro'yxati — 2026-11-27
+
+- **Egasi (2026-11-27):** «Davom eting» — rejadagi navbatdagi vazifa. 2-bosqichdan qolganlari (F2.4–F2.12) ichidan F2.8 tanlandi: yanvar
+  oxiridagi birinchi oylik sanash (BHMS 19; 2-buyruq — har oyning oxirgi ish kuni, natija INV-16 dalolatnomasida) va oyni yopish shu
+  vazifaga bog'liq. F2.8 ikki relizga bo'lindi: 1-qism (shu bo'lim, reliz 18) va 2-qism — barcha pul jadvallari uchun oy qulfi (reliz 19).
+- **Qarorlar (egasi barcha qarorlarni menga topshirgan):** oylik inventarizatsiya — alohida amal emas, oyning oxirgi kunini yopishning
+  o'zi (kassa ikki marta sanalmaydi); belgi oldindan qo'yilmaydi (komissiya bo'lmasa kun to'xtab qolmasin) — oyning oxirgi ish kunida
+  oynada eslatma, o'tkazilmagani nazorat ro'yxatida va oy oxiri ro'yxatida ko'rinadi; dekabrda — yillik; komissiya kamida 2 kishi
+  (rais va a'zo); kassir ↔ o'rinbosar smenasi — oddiy topshirish, moddiy javobgar shaxs almashganda — komissiya inventarizatsiyasi;
+  qat'iy hisobdagi blankalar («Қ» kvitansiyalari) — soni va raqamlari (ixtiyoriy, faqat inventarizatsiyada); oy oxiri ro'yxati — faqat
+  Direktor va 2-ro'yxat («Davr» oynasi bilan bir xil; kassirga emas).
+- **Server:** `kassa.sql` — `cash_counts` / `cash_handovers`: `"molChange"`, `blanks`. `kassa-day.sql` — `app.kassa_blanks`;
+  `app.kassa_count_apply` (yangi ta'rif: belgi va blankalar; farq hujjati asosi va izohi — INV-16); `kassa_day_close` — `inv`
+  (dalolatnoma turi 'monthly' / 'yearly', komissiya majburiy, blankalar faqat shunda; kun hodisasida `countKind`); `kassa_handover` —
+  `mol` (komissiya majburiy, takrorda belgi ham solishtiriladi), qabulda dalolatnomaga o'tadi; `kassa_day_json.invKind` (oxirgi yopish
+  sanashi bo'yicha; ochiq kunda — yo'q); `kassa_month_check(desk, month)` — oy oxiri ro'yxati: 14 band (yopilmagan va bog'lanmagan
+  yozuvli kunlar — to'siq; tekshirilmagan kunlar, INV-16, qarorsiz kamomad, QT, Z-hisobot, muddati o'tgan avanslar, limitdan oshgan
+  kunlar, biriktirilmagan tushumlar, berilmagan qaytarishlar, vedomost va to'lanmagan ish haqi, surat, qulf), `ready` / `readyWhy`
+  (`app.fin_lock_ready`), `canLock` (faqat Direktor); `kassa_checks.invMissing` (oxirgi 3 ta tugagan oy).
+- **Sahifa va bosma:** «Kunni yopish» — «Oylik / Yillik komissiya inventarizatsiyasi (INV-16)» belgisi (komissiya bloki, lavozimlar
+  taklifi, «Қ» blankalari; yopilgach INV-16 va KO-4 bosmasi); «Smena topshirish» — «Moddiy javobgar shaxs almashadi»; qabulda
+  INV-16 dalolatnomasi; kunlar ro'yxatida «INV-16» belgisi; kun oynasida dalolatnoma nomi; nazorat ro'yxatida «Oylik komissiya
+  inventarizatsiyasi» qatori (33 qator); «Davr» oynasida «Oy oxiri ro'yxati» (oy tanlash, bandlar, xulosa, Direktorga — «Oy oxiri surati va
+  davrni … gacha yopish»). `fin-print.js: countHtml` — INV-16 ko'rinishi 3 tilda (sarlavha va shakl kodi, sabab, kassirning tilxati,
+  oxirgi order raqamlari, nominallar, blankalar, natija, rahbar qarori qatori, komissiya imzolari — rais / a'zo).
+- **Reliz 18:** `fin-version.sql`, `SERVER_VER`, `kassa-checks.sql` (ochiq funksiyalar 56, ichki 121, himoya izlari 362),
+  `test-kassa-checks` (A0), `test-fin-rights` (buxgalter yopiq ro'yxatiga `kassa_month_check`).
+- **Sinovlar:** yangi `test-kassa-inv.sql` (43 tekshiruv; mutatsiya — 42/42 ushlandi), `fin-inv.test.mjs` (8); brauzer: yangi `k22`
+  (14), `k4` — nazorat ro'yxati 33 qator.
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 69/69, jonli zanjir, tugun va server sinovlari) — hammasi yashil;
+  brauzer to'plami — 29 o'tish, 734 tekshiruv (kassa 592), hammasi o'tdi.
+- **Egasi va buxgalter uchun:** kassa moduli hali `--dev` — jonli zanjirga o'tkazish bilan chiqadi (≈ 21-dekabr). Birinchi oylik
+  inventarizatsiya — yanvarning oxirgi ish kuni (29-yanvar, juma): komissiya (2-buyruq) kassada bo'lsin; INV-16 dalolatnomasi chop
+  etilib imzolanadi; keyin «Davr» → «Oy oxiri ro'yxati» → Direktor oyni yopadi. Keyingi qadam — F2.8 2-qism (barcha pul jadvallari
+  uchun oy qulfi).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

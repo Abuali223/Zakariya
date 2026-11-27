@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 17;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 18;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -494,7 +494,7 @@ function draw() {
       <td data-label="Chiqim" style="text-align:right">${esc(som(closed ? d.payouts : d.payoutsLive))}</td>
       <td data-label="Kun oxiri" style="text-align:right"><b>${esc(som(closed ? d.closing : d.balance))}</b></td>
       <td data-label="Farq" style="text-align:right">${closed ? (num(d.diff) === 0 ? '—' : `<span style="color:${num(d.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">${num(d.diff) > 0 ? '+' : ''}${esc(som(d.diff))}</span>`) : ''}${(d.handoverDiffs || []).filter(x => num(x)).length ? `<div class="small" style="color:#B54708">smenada ${esc((d.handoverDiffs || []).filter(x => num(x)).map(sgnS).join(', '))}</div>` : ''}</td>
-      <td data-label="Holat">${dayChip(d.status)}<div class="small muted">${closed ? 'yopdi: ' + esc(d.closedByName || nameOf(d.closedBy)) : 'kassir: ' + esc(d.cashierName || nameOf(d.cashierUid))}${d.status === 'verified' ? '<br>tekshirdi: ' + esc(d.verifiedByName || nameOf(d.verifiedBy)) : ''}</div>${closed && pendingText(d.pendingOpen) ? `<div class="small" data-pend="${esc(d.day)}" style="color:#B54708">hali o‘tkazilmagan: ${esc(pendingText(d.pendingOpen))}</div>` : ''}${zt ? `<div class="small" data-zst="${esc(d.day)}" style="${zBad ? (d.status === 'closed' ? 'color:#B42318;font-weight:700' : 'color:#B54708') : 'color:var(--muted)'}">Z: ${esc(zt)}</div>` : ''}</td>
+      <td data-label="Holat"><div>${dayChip(d.status)}<div class="small muted">${closed ? 'yopdi: ' + esc(d.closedByName || nameOf(d.closedBy)) : 'kassir: ' + esc(d.cashierName || nameOf(d.cashierUid))}${d.status === 'verified' ? '<br>tekshirdi: ' + esc(d.verifiedByName || nameOf(d.verifiedBy)) : ''}</div>${closed && pendingText(d.pendingOpen) ? `<div class="small" data-pend="${esc(d.day)}" style="color:#B54708">hali o‘tkazilmagan: ${esc(pendingText(d.pendingOpen))}</div>` : ''}${zt ? `<div class="small" data-zst="${esc(d.day)}" style="${zBad ? (d.status === 'closed' ? 'color:#B42318;font-weight:700' : 'color:#B54708') : 'color:var(--muted)'}">Z: ${esc(zt)}</div>` : ''}${closed && d.invKind ? `<div class="small" data-inv="${esc(d.day)}" style="color:#157347;font-weight:700">INV-16: ${d.invKind === 'yearly' ? 'yillik' : 'oylik'} komissiya inventarizatsiyasi</div>` : ''}</div></td>
       <td data-label="" style="white-space:nowrap"><button class="btn sm" data-view="${esc(d.day)}" title="Kun hujjatlari, sanashlar, jurnal">Ko‘rish</button> <button class="btn sm" data-book="${esc(d.day)}" title="Kassa kitobi varag‘i (KO-4)">🖨 KO-4</button>${d.status === 'closed' && zOp ? ` <button class="btn sm" data-zrep="${esc(d.day)}" title="Onlayn kassa Z-hisobotini kiritish / tuzatish">Z</button>` : ''}${d.status === 'closed' && (m.list2 || m.director) ? ` <button class="btn sm gold" data-verify="${esc(d.day)}">Tekshirish</button>` : ''}${d.status === 'closed' && m.director && d.id === lastId ? ` <button class="btn sm danger" data-reopen="${esc(d.day)}">Qayta ochish</button>` : ''}</td></tr>`;
   }).join('');
   const daysHtml = days.length ? `<div class="card" style="padding:14px 18px"><b>Kassa kunlari</b><div class="small muted" style="margin:2px 0 8px">Kun oxiri = kun boshi + kirim − chiqim. Kun faqat pul sanalgach yopiladi; farq shu kunning hujjati bo‘lib yoziladi.</div>
@@ -1018,8 +1018,54 @@ function openZForm(day) {
     await act('kassa_day_z', { p: { desk: ST.desk, day, z: zr.z } }, 'Z-hisobot saqlandi', r => zToast(r && r.day && r.day.z));
     const b = $('#kz-save'); if (b) b.disabled = false; };
 }
-const commissionFields = () => `<div class="small" style="font-weight:700;margin-top:10px">Komissiya (kassir o‘rniga yopilganda kamida 2 kishi)</div>${[0, 1, 2].map(i => `<div class="grid2" style="margin-top:6px"><input data-ct="${i}" type="text" placeholder="Lavozimi" maxlength="120" style="${FLD}"><input data-cn="${i}" type="text" placeholder="F.I.Sh." maxlength="200" style="${FLD}"></div>`).join('')}`;
+const commissionFields = () => `<div class="small" id="kcm-h" style="font-weight:700;margin-top:10px">Komissiya (kassir o‘rniga yopilganda kamida 2 kishi)</div>${[0, 1, 2].map(i => `<div class="grid2" style="margin-top:6px"><input data-ct="${i}" type="text" placeholder="Lavozimi" maxlength="120" style="${FLD}"><input data-cn="${i}" type="text" placeholder="F.I.Sh." maxlength="200" style="${FLD}"></div>`).join('')}`;
 const commissionRead = () => [0, 1, 2].map(i => ({ title: ($('#modal').querySelector(`[data-ct="${i}"]`) || {}).value || '', name: (($('#modal').querySelector(`[data-cn="${i}"]`) || {}).value || '').trim() })).filter(x => x.name.length >= 3);
+// F2.8 (INV-16): komissiya inventarizatsiyasi — oylik / yillik sanash (kunni yopishda; dekabrda — yillik) va moddiy javobgar shaxs
+//   almashganda (smena topshirishda). Doimiy komissiya (2-buyruq): rais — direktor, a'zolar — bosh buxgalter, moliya menejeri; kassir
+//   (moddiy javobgar) a'zo emas, ishtirok etadi. Server: kassa_day_close (inv), kassa_handover (mol) — komissiya kamida 2 kishi.
+const INV_TITLES = ['Rais — direktor', 'A’zo — bosh buxgalter', 'A’zo — moliya menejeri'];
+// Oyning oxirgi ish kuni (dushanba–juma; bayramlar hisobga olinmaydi — faqat taklif): keyingi ish kuni boshqa oyga tushadi
+export function lastWorkday(day) {
+  const d = new Date(String(day || '').slice(0, 10) + 'T12:00:00Z'); if (isNaN(d)) return false;
+  const mo = d.getUTCMonth();
+  do { d.setUTCDate(d.getUTCDate() + 1); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.getUTCMonth() !== mo;
+}
+// Foydalanilmagan qat'iy hisobdagi blankalar («Қ» kvitansiyalari): soni va raqamlari birga; ikkalasi bo'sh — yozilmaydi (server: app.kassa_blanks)
+export function blanksRead(cnt, nos) {
+  const c = String(cnt == null ? '' : cnt).trim(), n = String(nos == null ? '' : nos).trim();
+  if (!c && !n) return {};
+  if (!/^\d{1,5}$/.test(c)) return { err: '«Қ» blankalari soni — butun son (blanka yo‘q bo‘lsa — 0)' };
+  const k = Number(c);
+  if (k > 0 && !n) return { err: '«Қ» blankalari raqamlarini yozing (masalan 0013–0050)' };
+  if (k === 0 && n) return { err: '«Қ» blankalari 0 ta bo‘lsa, raqam yozilmaydi' };
+  return { blanks: { count: k, nos: n.slice(0, 300) } };
+}
+const invBlock = (pre, on, label, hint) => `<div style="margin-top:12px;border:1px solid var(--border-2);border-radius:10px;padding:10px 12px">
+    <label class="small" style="display:flex;gap:8px;align-items:flex-start;font-weight:700"><input type="checkbox" id="${pre}-inv" style="${CHK}"${on ? ' checked' : ''}> ${esc(label)}</label>
+    <div class="small muted" style="margin-top:4px">${esc(hint)}</div>
+    <div id="${pre}-inv-box"${on ? '' : ' style="display:none"'}><div class="grid2">${lbl('«Қ» blankalari (foydalanilmagan), soni', `<input id="${pre}-bcnt" type="text" inputmode="numeric" maxlength="5" placeholder="0" style="${FLD}">`)}${lbl('Raqamlari', `<input id="${pre}-bnos" type="text" maxlength="300" placeholder="masalan 0013–0050" style="${FLD}">`)}</div></div></div>`;
+// Belgi o'zgarganda: blankalar maydoni, komissiya bloki (kassir o'rniga yoki inventarizatsiya) va lavozimlar taklifi. O'qish: {on, blanks?, err?}
+function invBind(pre, needC) {
+  const cb = $(`#${pre}-inv`), box = $(`#${pre}-inv-box`), cm = $('#kc-comm'), h = $('#kcm-h');
+  const upd = () => { const on = !!(cb && cb.checked);
+    if (box) box.style.display = on ? '' : 'none';
+    if (cm) cm.style.display = needC || on ? '' : 'none';
+    if (h) h.textContent = on ? 'Inventarizatsiya komissiyasi (rais va kamida 1 a’zo; kassir — ishtirokchi)' : 'Komissiya (kassir o‘rniga yopilganda kamida 2 kishi)';
+    if (on) INV_TITLES.forEach((t, i) => { const el = $('#modal').querySelector(`[data-ct="${i}"]`); if (el && !el.value) el.value = t; }); };
+  if (cb) cb.onchange = upd;
+  upd();
+  return () => { if (!(cb && cb.checked)) return { on: false };
+    return Object.assign({ on: true }, blanksRead(($(`#${pre}-bcnt`) || {}).value, ($(`#${pre}-bnos`) || {}).value)); };
+}
+const invLine = iv => iv.on ? `\nKomissiya inventarizatsiyasi (INV-16)${iv.blanks ? ` · «Қ» blankalari: ${iv.blanks.count} ta${iv.blanks.nos ? ', № ' + iv.blanks.nos : ''}` : ''}` : '';
+// Inventarizatsiya dalolatnomasi (INV-16) — kunning oxirgi oylik / yillik sanashi (kunni yopgandan keyin)
+async function printInvAct(day) {
+  try { const book = await call('kassa_day_book', { p_desk: ST.desk, p_day: day });
+    const c = (book.counts || []).filter(x => x.kind === 'monthly' || x.kind === 'yearly').pop();
+    if (c) await printCount(book, c.id); }
+  catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
+}
 // Kunni yopish (state-2, CT-15): avval qurilma navbati yuboriladi (internet bo'lsa), keyin oyna yangi qoldiq bilan ochiladi — qolgan (yuborilmagan)
 //   navbat yozuvlari kaliti bilan «hali o'tkazilmagan» bo'lib yuboriladi (yopish bloklanmaydi); server qoldiq oyna ochilgandan keyin o'zgargan
 //   bo'lsa rad etadi (kassa:stale) — oyna qayta ochiladi. Natija xabarida — server hisoblagan farq. crit-3: «Қ» blankalari — alohida.
@@ -1035,12 +1081,17 @@ async function openCloseForm() {
   // sec-2: kassa egasi (kun kassiri) bo'lmagan kassir, Direktor, Moliya menejeri — kassir o'rniga: komissiya (server ham tekshiradi)
   const needC = needCommission(od, m);
   const instead = needC && od.cashierUid ? `<div class="small" style="margin-top:8px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px;font-weight:600">Kassa egasi — ${esc(od.cashierName || nameOf(od.cashierUid))}. Uning o‘rniga yopilmoqda: komissiya (kamida 2 kishi) dalolatnomani imzolaydi; kamomad bo‘lsa, javobgarni Direktor tanlaydi.</div>` : '';
+  // F2.8 (INV-16; server 18-reliz va undan keyin): belgini komissiya o'zi qo'yadi — oyning oxirgi ish kunida eslatma (oldindan belgilanmaydi:
+  //   komissiyasiz yopilayotgan kun to'xtab qolmasin; o'tkazilmagani oy oxiri ro'yxatida va nazorat ro'yxatida ko'rinadi)
+  const invOk = Number(ST.ov.state.version || 0) >= 18, invDay = invOk && lastWorkday(od.day);
+  const invHtml = invOk ? invBlock('kc', false, `${String(od.day).slice(5, 7) === '12' ? 'Yillik' : 'Oylik'} komissiya inventarizatsiyasi (INV-16)`,
+    (invDay ? 'Bugun — oyning oxirgi ish kuni: kun komissiya ishtirokida sanab yopiladi. ' : '') + 'Har oyning oxirgi ish kuni kassadagi pul va qat’iy hisobdagi blankalar doimiy komissiya ishtirokida sanaladi (rais — direktor, a’zolar — bosh buxgalter, moliya menejeri; kassir ishtirok etadi). Dekabrda — yillik. Dalolatnoma INV-16 shaklida chop etiladi.') : '';
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kunni yopish — ${esc(dmy(od.day))}</h3><button class="x" id="m-x">×</button></div>
-    <div class="modal-b">${countFields(num(od.balance), ob, { paper: true, late, po: od.pendingOpen })}${instead}${needC ? commissionFields() : ''}${isTest ? '' : zFields(oz)}
+    <div class="modal-b">${countFields(num(od.balance), ob, { paper: true, late, po: od.pendingOpen })}${instead}${invHtml}<div id="kc-comm"${needC ? '' : ' style="display:none"'}>${commissionFields()}</div>${isTest ? '' : zFields(oz)}
       <div class="small muted" style="margin-top:8px">Yopilgach bu kunga hujjat yozilmaydi (faqat Direktor qayta ochadi). Kassa kitobi varag‘ini 2 nusxada chop eting va imzolang.</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kc-save">Sanab yopish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  const read = countBind(num(od.balance), ob, od.pendingOpen), zRead = zBind();
+  const read = countBind(num(od.balance), ob, od.pendingOpen), zRead = zBind(), invRead = invBind('kc', needC);
   $('#kc-save').onclick = async () => {
     const v = read(); if (v.countedErr) { C.toast(v.countedErr, true); return; }
     if (v.counted == null) { C.toast('Sanalgan summani kiriting (0 bo‘lsa — 0)', true); return; }
@@ -1050,14 +1101,18 @@ async function openCloseForm() {
     const p = { desk: ST.desk, day: od.day, counted: v.counted, expected: num(od.balance), pendingRefs: v.pendingRefs, note: v.note };
     if (v.paper) p.paper = v.paper;
     if (v.denoms) p.denoms = v.denoms;
-    if (needC) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast('Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
+    const iv = invRead(); if (iv.err) { C.toast(iv.err, true); return; }
+    if (needC || iv.on) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast(iv.on ? 'Inventarizatsiya komissiyasini kiriting: rais va kamida 1 a’zo (F.I.Sh.)' : 'Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
+    if (iv.on) { p.inv = true; if (iv.blanks) p.blanks = iv.blanks; }
     const zr = zRead(); if (zr.err) { C.toast(zr.err, true); return; }
     if (zr.z) p.z = zr.z;
     else if (!isTest && oz.needed && !confirm('Onlayn kassa Z-hisoboti kiritilmadi.\n\nKun yopiladi, lekin nazorat ro‘yxatida ko‘rinadi va kunni tekshirishda izoh talab qilinadi. Z-hisobotni keyin «Z» tugmasi bilan kiritish mumkin.\n\nDavom etilsinmi?')) return;
     const qs = v.paper ? v.paper.sum : 0, d = v.counted - num(od.balance) - v.pending - v.handSum - qs;   // g7v-3: server ham shunday hisoblaydi
-    if (!confirm(`Kun yopilsinmi? ${dmy(od.day)}\n\nSanalgan: ${som(v.counted)}\nHisobda: ${som(od.balance)}${v.pending ? `\nQurilma navbatida (hali o‘tkazilmagan): ${som(v.pending)} (${v.pendingCount} ta)` : ''}${v.handSum ? `\nSmena topshirishda e’lon qilingan, hali kelmagan: ${som(v.handSum)} (${v.handCount} ta)` : ''}${v.handLeft ? `\nSanalgan pulga sig‘magan smena yozuvlari (ayirilmaydi): ${som(v.handLeftSum)} (${v.handLeft} ta)` : ''}${qs ? `\n«Қ» blankalari: ${som(qs)} (${v.paper.count} ta, № ${v.paper.nos})` : ''}${v.drop.length ? `\nNavbatdan o‘chiriladi (qayta kiritilgan / pul qaytarilgan): ${v.drop.length} ta` : ''}\n${d === 0 ? 'Farq yo‘q.' : (d < 0 ? 'KAMOMAD: ' + som(-d) : 'ORTIQCHA: ' + som(d))}${p.z ? '\n' + zSummary(p.z) : ''}`)) return;
+    if (!confirm(`Kun yopilsinmi? ${dmy(od.day)}\n\nSanalgan: ${som(v.counted)}\nHisobda: ${som(od.balance)}${v.pending ? `\nQurilma navbatida (hali o‘tkazilmagan): ${som(v.pending)} (${v.pendingCount} ta)` : ''}${v.handSum ? `\nSmena topshirishda e’lon qilingan, hali kelmagan: ${som(v.handSum)} (${v.handCount} ta)` : ''}${v.handLeft ? `\nSanalgan pulga sig‘magan smena yozuvlari (ayirilmaydi): ${som(v.handLeftSum)} (${v.handLeft} ta)` : ''}${qs ? `\n«Қ» blankalari: ${som(qs)} (${v.paper.count} ta, № ${v.paper.nos})` : ''}${v.drop.length ? `\nNavbatdan o‘chiriladi (qayta kiritilgan / pul qaytarilgan): ${v.drop.length} ta` : ''}\n${d === 0 ? 'Farq yo‘q.' : (d < 0 ? 'KAMOMAD: ' + som(-d) : 'ORTIQCHA: ' + som(d))}${p.z ? '\n' + zSummary(p.z) : ''}${invLine(iv)}`)) return;
     $('#kc-save').disabled = true;
-    await act('kassa_day_close', { p }, r => 'Kun yopildi: ' + countResultText(r), r => { dropOutbox(v.drop); zToast(r && r.day && r.day.z); if (confirm('Kassa kitobi varag‘i (KO-4) chop etilsinmi?')) printBook(od.day); },
+    await act('kassa_day_close', { p }, r => 'Kun yopildi: ' + countResultText(r), async r => { dropOutbox(v.drop); zToast(r && r.day && r.day.z);
+      if (iv.on && confirm('Inventarizatsiya dalolatnomasi (INV-16) chop etilsinmi?')) await printInvAct(od.day);
+      if (confirm('Kassa kitobi varag‘i (KO-4) chop etilsinmi?')) printBook(od.day); },
       staleReopen(openCloseForm));
     const b = $('#kc-save'); if (b) b.disabled = false;
   };
@@ -1074,17 +1129,20 @@ async function openHandoverForm() {
   $('#modal').innerHTML = `<div class="modal-h"><h3>Smena topshirish — ${esc(dmy(od.day))}</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">${lbl('Qabul qiluvchi kassir', `<select id="kh-to" style="${FLD}"><option value="">— tanlang —</option>${opsL.map(o => `<option value="${esc(o.uid)}">${esc(o.name)}${o.uid === m.uid ? ' (o‘zim)' : ''}</option>`).join('')}</select>`, ';margin-top:0')}
       ${needC ? `<div class="small" style="margin-top:8px;background:#FEF3E2;color:#B54708;border-radius:10px;padding:8px 10px;font-weight:600">${holder ? `Kassa egasi — ${esc(od.cashierName || nameOf(holder))}. ` : ''}Siz kassir o‘rniga topshiryapsiz: komissiya (kamida 2 kishi) bilan.</div>` : ''}
-      ${countFields(num(od.balance), ob, { po: od.pendingOpen })}${needC ? commissionFields() : ''}<div class="small muted" style="margin-top:8px">Pul ikkala kassir ishtirokida sanaladi. Topshirilgach qabul qiluvchi o‘z hisobidan «Qabul qildim» deydi — shundagina smena o‘tadi va farq bo‘lsa hujjat yoziladi (kassa egasi — topshiruvchi nomidan). Qabul qilinguncha kassada hujjat yozilmaydi; kun ochiq qoladi.</div></div>
+      ${countFields(num(od.balance), ob, { po: od.pendingOpen })}${Number(ST.ov.state.version || 0) >= 18 ? invBlock('kh', false, 'Moddiy javobgar shaxs almashadi (yangi kassir, uzoq ta’til, ishdan ketish) — komissiya inventarizatsiyasi (INV-16)',
+        'Kassir ↔ o‘rinbosar smenasi — oddiy topshirish (belgilanmaydi). Moddiy javobgar shaxs almashganda kassa komissiya bilan inventarizatsiya qilinadi (BHMS 19): komissiya — kamida 2 kishi, dalolatnoma INV-16 shaklida.') : ''}<div id="kc-comm"${needC ? '' : ' style="display:none"'}>${commissionFields()}</div><div class="small muted" style="margin-top:8px">Pul ikkala kassir ishtirokida sanaladi. Topshirilgach qabul qiluvchi o‘z hisobidan «Qabul qildim» deydi — shundagina smena o‘tadi va farq bo‘lsa hujjat yoziladi (kassa egasi — topshiruvchi nomidan). Qabul qilinguncha kassada hujjat yozilmaydi; kun ochiq qoladi.</div></div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kh-save">Topshirish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
-  const read = countBind(num(od.balance), ob, od.pendingOpen);
+  const read = countBind(num(od.balance), ob, od.pendingOpen), invRead = invBind('kh', needC);
   $('#kh-save').onclick = async () => { const v = read(), to = $('#kh-to').value;
     if (!to) { C.toast('Qabul qiluvchi kassirni tanlang', true); return; }
     if (v.countedErr) { C.toast(v.countedErr, true); return; }
     if (v.counted == null) { C.toast('Sanalgan summani kiriting', true); return; }
     if (v.failedMissing) { C.toast(failedAsk, true); return; }   // js-1
     const p = { desk: ST.desk, counted: v.counted, expected: num(od.balance), pendingRefs: v.pendingRefs, toUid: to, note: v.note }; if (v.denoms) p.denoms = v.denoms;
-    if (needC) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast('Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
+    const iv = invRead(); if (iv.err) { C.toast(iv.err, true); return; }
+    if (needC || iv.on) { p.commission = commissionRead(); if (p.commission.length < 2) { C.toast(iv.on ? 'Inventarizatsiya komissiyasini kiriting: kamida 2 kishi (F.I.Sh.)' : 'Komissiya a’zolarini kiriting (kamida 2 kishi)', true); return; } }
+    if (iv.on) { p.mol = true; if (iv.blanks) p.blanks = iv.blanks; }
     $('#kh-save').disabled = true;
     await act('kassa_handover', { p }, r => 'Smena topshirish yozildi (' + countResultText(r) + ') — qabul qiluvchi o‘z hisobidan «Qabul qildim» desin', () => dropOutbox(v.drop), staleReopen(openHandoverForm));
     const b = $('#kh-save'); if (b) b.disabled = false; };
@@ -1096,9 +1154,9 @@ function acceptHandover(id) {
   // state-2: topshirishda saqlangan hali o'tkazilmagan navbat yozuvlari (topshiruvchi qurilmasidan; g7v-3: shu kungi oldingi smena
   //   topshirishlaridan qolganlari ham — shuning uchun qaysi qurilmada ekani aytilmaydi) — dalolatnomaga o'zgarmay o'tadi
   const np = (h.pendingRefs || []).length;
-  if (!confirm(`Smenani qabul qilasizmi?\n\nTopshiruvchi: ${h.fromUid ? hn(h.fromUid) : '—'}\nSanalgan: ${som(h.counted)}\nHisobda: ${som(h.expected)}${num(h.pendingSum) ? '\nHali o‘tkazilmagan navbat yozuvlari: ' + som(h.pendingSum) + (np ? ` (${np} ta)` : '') : ''}\n${d0 === 0 ? 'Farq yo‘q.' : (d0 < 0 ? 'KAMOMAD: ' + som(-d0) : 'ORTIQCHA: ' + som(d0)) + ' — shu kun hujjati topshiruvchi nomidan yoziladi.'}\n\nQabul qilgach kassa siz zimmangizda bo‘ladi.`)) return;
+  if (!confirm(`Smenani qabul qilasizmi?${h.molChange ? ' (moddiy javobgar almashganda — komissiya inventarizatsiyasi, INV-16)' : ''}\n\nTopshiruvchi: ${h.fromUid ? hn(h.fromUid) : '—'}\nSanalgan: ${som(h.counted)}\nHisobda: ${som(h.expected)}${num(h.pendingSum) ? '\nHali o‘tkazilmagan navbat yozuvlari: ' + som(h.pendingSum) + (np ? ` (${np} ta)` : '') : ''}\n${d0 === 0 ? 'Farq yo‘q.' : (d0 < 0 ? 'KAMOMAD: ' + som(-d0) : 'ORTIQCHA: ' + som(d0)) + ' — shu kun hujjati topshiruvchi nomidan yoziladi.'}\n\nQabul qilgach kassa siz zimmangizda bo‘ladi.`)) return;
   act('kassa_handover_accept', { p_id: id }, 'Smena qabul qilindi', async r => {
-    if (!(r && r.count && r.count.id) || !confirm('Smena topshirish-qabul dalolatnomasi chop etilsinmi?')) return;
+    if (!(r && r.count && r.count.id) || !confirm(r.count.molChange ? 'Inventarizatsiya dalolatnomasi (INV-16) chop etilsinmi?' : 'Smena topshirish-qabul dalolatnomasi chop etilsinmi?')) return;
     try { const book = await call('kassa_day_book', { p_desk: ST.desk, p_day: r.count.day }); await printCount(book, r.count.id); } catch (e) { C.toast('Chop etib bo‘lmadi: ' + errText(e), true); }
   });
 }
@@ -1303,6 +1361,50 @@ function saveJson(name, obj) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' }));
   a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
+// F2.8: oy oxiri ro'yxati (kassa_month_check) — server faktlarni beradi, baho va matn shu yerda
+const MC_LBL = { days_open: 'Yopilmagan kassa kunlari', days_pending: 'Hali bog‘lanmagan yozuvlar bilan yopilgan kunlar', unverified: 'Tekshirilmagan (yopilgan) kunlar',
+  inv: 'Oylik komissiya inventarizatsiyasi (INV-16)', shortages: 'Qarori kutilayotgan kamomad', fixes: 'Qaror kutayotgan qayta tasnif (QT)', z: 'Onlayn kassa Z-hisoboti',
+  advances: 'Muddati o‘tgan avans hisobotlari', limit: 'Kassa limitidan oshgan kunlar', unmatched: 'Biriktirilmagan tushumlar', refunds: 'Berilmagan qaytarishlar',
+  payroll: 'Vedomost va to‘lanmagan ish haqi', snapshot: 'Oy oxiri surati', lock: 'Davr qulfi' };
+const MC_HINT = { days_open: 'Kunni sanab yoping — ochiq kun bilan davr yopilmaydi', days_pending: 'Qurilma navbati yuborilsin; «Қ» blankalari yozuvlari kiritilib, kun izoh bilan tekshirilsin',
+  unverified: 'Buxgalter qog‘oz varaq va orderlarni olib, kunni tekshiradi',
+  inv: 'Har oyning oxirgi ish kuni kun komissiya ishtirokida sanab yopiladi. O‘tkazilmagan bo‘lsa — Direktor oxirgi kunni qayta ochadi (tekshirilmagan bo‘lsa) va kun komissiya bilan qayta yopiladi',
+  shortages: 'Direktor qarori: xodim zimmasiga yoki hisobdan chiqarish', fixes: 'Direktor «QT» ro‘yxatida qaror qiladi', z: 'Z-hisobot kiritiladi yoki farq izoh bilan tekshiriladi',
+  advances: 'Hisobdorlar avans hisobotini topshiradi yoki qoldiqni qaytaradi', limit: 'Ortiqcha naqd bankka topshirilishi kerak edi (inkassatsiya)',
+  unmatched: 'Tushum o‘quvchiga biriktiriladi («To‘lovlar»)', refunds: 'Kassir qaytarishni beradi yoki Direktor bekor qiladi',
+  payroll: 'Vedomost tasdiqlanadi; to‘lanmagan ish haqi keyingi oyga qoldiq bo‘lib o‘tadi', snapshot: 'Direktor oy oxiri suratini oladi', lock: 'Surat bilan birga davr yopiladi' };
+const MC_LVL = { block: 'bad', warn: 'warn', info: 'info', ok: 'ok' };
+const RUN_ST = { none: 'tuzilmagan', draft: 'qoralama', submitted: 'tasdiqqa yuborilgan', approved: 'tasdiqlangan', returned: 'qaytarilgan' };
+export function monthCheckRows(mc) {
+  mc = mc || {};
+  const days = a => (a || []).slice(0, 6).map(dmy).join(', ') + ((a || []).length > 6 ? ' …' : '');
+  return (mc.items || []).map(it => { const n = num(it.n); let v;
+    switch (it.code) {
+      case 'days_open': case 'days_pending': case 'unverified': v = n ? `${n} ta: ${days(it.days)}` : 'yo‘q'; break;
+      case 'inv': v = !it.lastDay ? 'shu oyda yopilgan kassa kuni yo‘q'
+        : it.level === 'ok' ? `o‘tkazilgan — ${dmy(it.lastDay)}${it.kind === 'yearly' ? ' (yillik)' : ''}`
+        : mc.ended ? `oxirgi kun (${dmy(it.lastDay)}) oddiy yopilgan${(it.invDays || []).length ? `; inventarizatsiya: ${days(it.invDays)}` : ''}` : 'oyning oxirgi ish kunida o‘tkaziladi'; break;
+      case 'shortages': case 'unmatched': case 'refunds': v = n ? `${n} ta · ${som(it.sum)}` : 'yo‘q'; break;
+      case 'fixes': v = n ? `${n} ta` : 'yo‘q'; break;
+      case 'z': v = n ? `${n} ta kun: ${days(it.days)}` : 'mos'; break;
+      case 'advances': v = n ? `${n} kishi · ${som(it.sum)} (${dmy(it.asOf)} holatiga)` : 'yo‘q'; break;
+      case 'limit': v = !num(it.cashLimit) ? 'limit belgilanmagan' : n ? `${n} ta kun: ${days(it.days)}` : 'oshmagan'; break;
+      case 'payroll': v = `vedomost — ${RUN_ST[it.run] || it.run || '—'}${n ? `; to‘lanmagan: ${n} kishi · ${som(it.sum)}` : '; to‘lanmagan qoldiq yo‘q'}`; break;
+      case 'snapshot': v = it.snapshot ? `olingan (${num(it.snapshot.version)}-surat${it.snapshot.late ? ', kechikib' : ''})` : 'olinmagan'; break;
+      case 'lock': v = n ? `${dmy(it.lockedThrough)} gacha yopilgan` : it.lockedThrough ? `${dmy(it.lockedThrough)} gacha yopilgan — bu oy hali ochiq` : 'davr yopilmagan'; break;
+      default: v = n ? String(n) : '—';
+    }
+    return { code: it.code, label: MC_LBL[it.code] || it.code, level: MC_LVL[it.level] || 'info', value: v, hint: MC_HINT[it.code] || '' };
+  });
+}
+export function monthCheckSummary(mc) {
+  mc = mc || {}; const w = num(mc.warnings), who = mc.canLock ? 'davrni yopish mumkin' : 'davrni Direktor yopadi';
+  if (mc.isTest) return 'Sinov kassasi — davr qulfi unga qaramaydi; ro‘yxat faqat mashq uchun.';
+  if (mc.locked) return `Davr ${dmy(mc.lockedThrough)} gacha yopilgan ✓`;
+  if (!mc.ended) return 'Oy hali tugamagan — ro‘yxat oldindan ko‘rish uchun.';
+  if (num(mc.blockers) || !mc.ready) return `Davrni yopib bo‘lmaydi${num(mc.blockers) ? `: ${num(mc.blockers)} ta to‘siq` : ''}${mc.readyWhy ? ' — ' + mc.readyWhy : ''}`;
+  return w ? `${w} ta ogohlantirish — tuzating yoki izoh bilan qabul qiling; ${who}.` : `Hammasi joyida — ${who}.`;
+}
 async function openPeriodForm() {
   const m = me();
   $('#modal').innerHTML = `<div class="modal-h"><h3>Davr surati va qulfi</h3><button class="x" id="m-x">×</button></div><div class="modal-b"><div class="loading">Yuklanmoqda…</div></div>`;
@@ -1311,6 +1413,13 @@ async function openPeriodForm() {
   try { L = await call('fin_snapshots_list'); } catch (e) { C.toast(errText(e), true); C.closeModal(); return; }
   const items = L.items || [], today = L.today || (ST.ov && ST.ov.state && ST.ov.state.today) || '';
   const def = prevMonthEnd(today);
+  // F2.8: oy oxiri ro'yxati (server 18-reliz va undan keyin) — oxirgi 7 oy, standart — o'tgan oy
+  const mcOk = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 18, mOpts = [];
+  for (let y = +String(today).slice(0, 4), mo = +String(today).slice(5, 7), i = 0; i < 7 && y > 2000; i++) { mOpts.push(`${y}-${String(mo).padStart(2, '0')}`); if (--mo < 1) { mo = 12; y--; } }
+  const mcHtml = mcOk && mOpts.length > 1 ? `<div style="margin-top:12px"><b>Oy oxiri ro‘yxati</b>
+      <div class="small muted" style="margin-top:2px">Davrni yopishdan oldin: kunlar yopilgan va tekshirilgan, oylik komissiya inventarizatsiyasi (INV-16), kamomad qarorlari, Z-hisobot, avanslar, biriktirilmagan tushumlar, vedomost.</div>
+      <div class="grid2">${lbl('Oy', `<select id="kpd-month" style="${FLD}">${mOpts.map((v, i) => `<option value="${esc(v)}"${i === 1 ? ' selected' : ''}>${esc(MONTHS_UZ[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4))}</option>`).join('')}</select>`)}<span></span></div>
+      <div id="kpd-mc" style="margin-top:8px"></div></div>` : '';
   const tot = t => { t = t || {}; return `qarzdorlik ${som(t.receivable)} · avans va oldindan to‘lov ${som(num(t.credit) + num(t.prepaid))} · kassa ${som(t.cash)}${num(t.salaryPayable) ? ' · to‘lanmagan ish haqi ' + som(t.salaryPayable) : ''}${num(t.unmatched) ? ' · biriktirilmagan ' + som(t.unmatched) : ''}`; };
   const rows = items.map(x => `<div data-snap="${esc(x.id)}" style="border:1px solid var(--border-2);border-radius:10px;padding:10px 12px;margin-top:8px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><b>${esc(dmy(x.asOf))}</b> <span class="small muted">${esc(SNAP_KIND[x.kind] || x.kind)}${num(x.version) > 1 ? ' · ' + esc(String(x.version)) + '-surat' : ''}</span>${x.late ? ' ' + chip('kechikib olingan', '#B54708', '#FEF3E2') : ''}</div>
@@ -1321,6 +1430,7 @@ async function openPeriodForm() {
   $('#modal').innerHTML = `<div class="modal-h"><h3>Davr surati va qulfi</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <div class="small" id="kpd-lock" style="background:#eef3f1;border-radius:10px;padding:10px 12px;font-weight:600">${L.lockedThrough ? `Davr <b>${esc(dmy(L.lockedThrough))}</b> gacha yopilgan — shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.` : 'Davr yopilmagan: orqaga sanali yozuvlar cheklanmagan (to‘lovda — 31 kungacha).'}</div>
+      ${mcHtml}
       ${m.director ? `<div style="margin-top:12px"><b>Yangi surat</b>
         <div class="small muted" style="margin-top:2px">Davr oxiridagi holat saqlanadi: o‘quvchilar bo‘yicha qarzdorlik va avanslar, biriktirilmagan tushumlar, kassa qoldig‘i, to‘lanmagan ish haqi. Surat keyin o‘zgarmaydi. Yil yakuni — 31-dekabr holati, yanvar yozuvlari boshlanguncha olinadi.</div>
         <div class="grid2">${lbl('Qaysi kun oxiri holati', `<input id="kpd-day" type="date" value="${esc(def)}" max="${esc(today)}" style="${FLD}">`)}${lbl('Izoh', `<input id="kpd-note" type="text" maxlength="300" placeholder="masalan: 2026-yil yakuni" style="${FLD}">`)}</div>
@@ -1335,6 +1445,28 @@ async function openPeriodForm() {
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button></div>`;
   $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  const mcSel = $('#kpd-month');
+  const loadMc = async () => { const box = $('#kpd-mc'); if (!box) return;
+    box.innerHTML = '<div class="loading">Yuklanmoqda…</div>';
+    let mc; try { mc = await call('kassa_month_check', { p_desk: ST.desk, p_month: mcSel.value }); }
+    catch (e) { box.innerHTML = `<div class="small" style="color:#B42318">${esc(errText(e))}</div>`; return; }
+    if (!$('#kpd-mc') || mcSel.value !== mc.month) return;   // oyna yopilgan yoki boshqa oy tanlangan
+    const rows = monthCheckRows(mc), mName = MONTHS_UZ[+String(mc.month).slice(5, 7) - 1] + ' ' + String(mc.month).slice(0, 4);
+    box.innerHTML = `<div class="tablewrap"><table id="kpd-mc-tbl"><tbody>${rows.map(r => `<tr data-mc="${esc(r.code)}" data-mclv="${esc(r.level)}"><td data-label="Tekshiruv" style="white-space:normal"><b>${esc(r.label)}</b>${r.hint && (r.level === 'warn' || r.level === 'bad') ? `<div class="small muted">${esc(r.hint)}</div>` : ''}</td>
+        <td data-label="Holat">${chip(LVL[r.level][0], LVL[r.level][1], LVL[r.level][2])}</td><td data-label="Natija" style="white-space:normal">${esc(r.value)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="small" id="kpd-mc-sum" style="margin-top:8px;font-weight:600">${esc(monthCheckSummary(mc))}</div>
+      ${mc.canLock ? `<div style="margin-top:8px"><button type="button" class="btn gold" id="kpd-mc-lock">Oy oxiri surati va davrni ${esc(dmy(mc.to))} gacha yopish</button></div>` : ''}`;
+    const lb = $('#kpd-mc-lock');
+    if (lb) lb.onclick = async () => {
+      const w = rows.filter(r => r.level === 'warn').map(r => `• ${r.label}: ${r.value}`);
+      if (!confirm(`${mName} yopilsinmi?\n\n${dmy(mc.to)} kuni oxiridagi holat surati olinadi va davr ${dmy(mc.to)} gacha YOPILADI: shu sanagacha to‘lov, xarajat, maosh va avans yozuvlari kiritilmaydi va o‘zgartirilmaydi.${w.length ? `\n\nDiqqat — ogohlantirishlar (izoh bilan qabul qilinadi):\n${w.join('\n')}` : ''}`)) return;
+      lb.disabled = true;
+      try { await call('fin_snapshot_take', { p: { asOf: mc.to, note: `${mName} yakuni`, lock: true } });
+        C.toast(`${mName} yopildi ✓`); await reload().catch(() => {}); if (C.onChange) C.onChange(); await openPeriodForm(); }
+      catch (e) { lb.disabled = false; C.toast(errText(e), true); }
+    };
+  };
+  if (mcSel) { mcSel.onchange = loadMc; loadMc(); }
   const day = $('#kpd-day'), lk = $('#kpd-lockit');
   if (day && lk) { const upd = () => { const can = day.value && day.value < today; lk.disabled = !can; if (!can) lk.checked = false; }; day.onchange = upd; upd(); }
   const take = $('#kpd-take');
@@ -1650,6 +1782,11 @@ export function controlRows(c) {
   if (c.fixPending != null) add('fixPending', 'Qaror kutayotgan qayta tasnif (QT) so‘rovlari', num(c.fixPending) ? 'warn' : 'ok', num(c.fixPending) ? cnt(c.fixPending) : 'yo‘q',
     'Direktor «QT» ro‘yxatida yoki «Tasdiqlash» bo‘limida tasdiqlaydi yoki rad etadi');
   if (num(c.fixes30)) add('fixes30', 'Qayta tasniflangan orderlar', 'info', cnt(c.fixes30), 'Statiya, oluvchi yoki asos dalolatnoma bilan tuzatilgan — statiya matritsasi, kontragent ko‘chirmasi va «Buxgalteriya» tuzatilgan holatni ko‘rsatadi');
+  // F2.8 (INV-16; server 18-reliz va undan keyin): oxirgi 3 ta tugagan oyda oxirgi kassa kuni komissiya inventarizatsiyasisiz yopilgan oylar
+  if (c.invMissing && !c.isTest) { const im = c.invMissing;
+    add('inv', 'Oylik komissiya inventarizatsiyasi (INV-16)', im.length ? 'warn' : 'ok',
+      im.length ? im.map(x => `${MONTHS_UZ[+String(x.month).slice(5, 7) - 1] || x.month} ${String(x.month).slice(0, 4)}: oxirgi kun ${dmy(x.lastDay)} oddiy yopilgan`).join('; ') : 'kamchilik yo‘q',
+      'Har oyning oxirgi ish kuni kun komissiya ishtirokida sanab yopiladi («Kunni yopish» → «Oylik komissiya inventarizatsiyasi»). O‘tkazilmagan bo‘lsa — Direktor oxirgi kunni qayta ochadi (tekshirilmagan bo‘lsa) va kun komissiya bilan qayta yopiladi'); }
   const ub = c.unprintedBooks30 || [];
   add('unprinted', 'Kassa kitobi varag‘i chop etilmagan kunlar', ub.length ? 'warn' : 'ok', ub.length ? `${ub.length} ta: ${days(ub)}` : 'yo‘q', 'KO-4 ikki nusxada chop etilib imzolanadi');
   const lim = c.limit || {};
@@ -1733,7 +1870,8 @@ function controlHtml(c, stale) {   // stale — oldingi yuklashdagi ma'lumot (ya
 }
 
 // ---------------------------------------------------------------- kun varag'i: hujjatlar, sanashlar, jurnal (tekshiruvchi uchun)
-const CNT_LBL = { close: 'Kun yopish sanashi', handover: 'Smena topshirish-qabul', opening: 'Boshlang‘ich qoldiq', monthly: 'Oylik sanash', yearly: 'Yillik sanash', surprise: 'To‘satdan sanash' };
+const CNT_LBL = { close: 'Kun yopish sanashi', handover: 'Smena topshirish-qabul', opening: 'Boshlang‘ich qoldiq', monthly: 'Oylik komissiya inventarizatsiyasi (INV-16)', yearly: 'Yillik komissiya inventarizatsiyasi (INV-16)', surprise: 'To‘satdan sanash' };
+const cntLabel = c => c.kind === 'handover' && c.molChange ? 'Moddiy javobgar almashganda inventarizatsiya (INV-16)' : (CNT_LBL[c.kind] || c.kind);
 const EV_LBL = { open: 'Kun ochildi', close: 'Kun yopildi', verify: 'Tekshirildi', reopen: 'Qayta ochildi', handover: 'Smena topshirildi', opening: 'Boshlang‘ich qoldiq', decision: 'Kamomad qarori', zreport: 'Z-hisobot',
   resplit: 'Qaytarish hisobvarag‘i (4010 / 6310) qayta aniqlandi' };
 // smena topshirish bosqichlari (state-6; eski yozuvda bosqich yo'q — bir bosqichli topshirish)
@@ -1757,7 +1895,7 @@ async function openDayView(day) {
   // sanashlar: ismlar — sanash paytidagi (sec-4); kassa egasi va sanagan xodim alohida (sec-2); smenada — topshirdi → qabul qildi
   const cn = (c, u) => (u && c.names && c.names[u]) || nm(u);
   const cnts = (book.counts || []).map(c => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-2)">
-      <div class="small"><b>${esc(CNT_LBL[c.kind] || c.kind)}</b> · ${esc(hm(c.at))} · sanalgan ${esc(som(c.counted))}${num(c.diff) ? ` · <span style="color:${num(c.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">farq ${num(c.diff) > 0 ? '+' : ''}${esc(som(c.diff))}</span>` : ' · farq yo‘q'}<div class="muted">${c.kind === 'handover'
+      <div class="small"><b>${esc(cntLabel(c))}</b> · ${esc(hm(c.at))} · sanalgan ${esc(som(c.counted))}${num(c.diff) ? ` · <span style="color:${num(c.diff) < 0 ? '#B42318' : '#B54708'};font-weight:700">farq ${num(c.diff) > 0 ? '+' : ''}${esc(som(c.diff))}</span>` : ' · farq yo‘q'}<div class="muted">${c.kind === 'handover'
         ? esc(cn(c, c.fromUid || c.byUid)) + (c.toUid ? ' → ' + esc(cn(c, c.toUid)) : '') + (c.byUid && c.fromUid && c.byUid !== c.fromUid ? ' · sanadi: ' + esc(cn(c, c.byUid)) : '')
         : esc(cn(c, c.byUid)) + (c.cashierUid && c.cashierUid !== c.byUid ? ' · kassa egasi: ' + esc(cn(c, c.cashierUid)) + ' (kassir o‘rniga)' : '')}</div></div>
       <button class="btn sm" data-cprint="${esc(c.id)}">🖨 Dalolatnoma</button></div>`).join('');

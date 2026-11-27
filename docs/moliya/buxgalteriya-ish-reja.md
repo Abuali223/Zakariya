@@ -519,7 +519,7 @@ kompyuter, smenalar; har almashuvda topshirish-qabul sanashi (FD-16).
 | CT-16 | `clientRef` noyob (takror yozuv yo‘q) | 1a |
 | CT-17 | `postedAt = now()`, `createdBy = app.uid()` | 1a |
 | CT-18 | `chlog_attach`; yopish / tekshirish / qayta ochish / bekor qilish faktlari ustunlarda | 1a |
-| CT-19 | Oyning oxirgi ish kuni komissiya sanashi (BHMS 19, 5-band); birinchisi 30-dekabr (31-dekabr kassa naqd ishlamaydi — egasi qarori, 2026-11-16) | 1a / 2 |
+| CT-19 | Oyning oxirgi ish kuni komissiya sanashi (BHMS 19, 5-band); birinchisi 30-dekabr (31-dekabr kassa naqd ishlamaydi — egasi qarori, 2026-11-16); ✅ F2.8 (reliz 18): kunni yopishda «Oylik komissiya inventarizatsiyasi (INV-16)» — komissiya majburiy, INV-16 dalolatnomasi, oy oxiri ro‘yxatida va nazorat ro‘yxatida nazorat | 1a / 2 |
 | CT-20 | `sinov` kassa (o‘z hisoblagichlari, hisobotlarga kirmaydi) | 1a |
 | CT-21 | Aholidan naqd KO-1 fiskal chek raqamisiz o‘tmaydi (istisno — direktor, jurnal, RP-06) | 1a |
 | CT-22 | Har KO-1/KO-2 da tomon majburiy: tur + kalit; erkin matn faqat «boshqa» uchun, belgilanadi | 1a |
@@ -572,8 +572,9 @@ qaytarish (masalan, ketgan o‘quvchining oldindan to‘lagan puli) — 1a da bo
 Naqdsiz avans qaytarish (`refund_credit`) — kerak bo‘lsa (F2.11).
 
 ### 4.12 Davrni yopish
-Kun: sanash → yopish → tekshirish. Oy (kassa): oxirgi ish kuni komissiya sanashi (INV-16, oxirgi KO raqamlari), KO-3,
-statiya matritsasi, nazorat ro‘yxati; barcha pul jadvallari uchun oy qulfi (F2.8). Oy (bosh kitob): MC-1…MC-13 5-ish
+Kun: sanash → yopish → tekshirish. Oy (kassa): oxirgi ish kuni komissiya sanashi (INV-16, oxirgi KO raqamlari, «Қ» blankalari —
+✅ F2.8: «Kunni yopish» → «Oylik komissiya inventarizatsiyasi»), KO-3, statiya matritsasi, nazorat ro‘yxati, oy oxiri ro‘yxati
+(✅ F2.8: «Davr» → «Oy oxiri ro‘yxati» → Direktor surat bilan davrni yopadi); barcha pul jadvallari uchun oy qulfi (F2.8b). Oy (bosh kitob): MC-1…MC-13 5-ish
 kunigacha [BUX] (4-bosqich). Yil: 30-dekabr kechqurun komissiya sanashi (oylik + yillik; 31-dekabr kassa naqd ishlamaydi —
 egasi qarori, 2026-11-16) = tizimning boshlang‘ich qoldig‘i; qog‘oz daftarlarni yopish dalolatnomasi (006); «31-dekabr holati»
 surati (F1.16) — 4-yanvar ertalab, birinchi kassa kuni ochilishidan oldin, qulf bilan bitta amalda (surat — olingan paytdagi holat,
@@ -1019,7 +1020,7 @@ Chiqish: AC1.19; Excel kunlik varag‘i to‘xtagan.
 | F2.5 | M | 2,5 | RP-09 (maosh taqsimoti, XLSX) | F2.1, F2.3 | Jami = Σ hujjatlar |
 | F2.6 | L | 5 | Avans hisobotlari: ortiqcha sarf (6970 va qaytarish orderi), suratlar, tasdiq, RP-07 yoshi; zavxoz maqsadlaridan statiya taklifi (minimal qism — 1a da, `nc_adv_report`) | F1.4; FD-14, 31 | Qoldiq formulasi; yanvar qulfdan oldin |
 | F2.7 | M | 2,5 | Faktura tarkibi (`grossAmount`, `discountParts`), noyabrdan backfill | FD-32 | 100 % fakturada mos (±1 so‘m) |
-| F2.8 | M | 3 | Oylik sanash dalolatnomasi, topshirish-qabul, oy oxiri ro‘yxati; barcha pul jadvallari uchun oy qulfi (tizim mustasno) | F1.9, F1.16 | Qulflangan oyga yozuv rad; webhook’lar ishlaydi |
+| F2.8 | M | 3 | ◐ 1-qism ✅ (reliz 18): oylik sanash dalolatnomasi — kunni yopishda oylik / yillik komissiya inventarizatsiyasi (INV-16: komissiya kamida 2 kishi — rais va a’zo, foydalanilmagan «Қ» blankalari — soni va raqamlari; sanash dalolatnomasi turi 'monthly' / 'yearly', farq hujjati asosi «inventarizatsiya qilish dalolatnomasi (INV-16)»); topshirish-qabul — moddiy javobgar shaxs almashganda smena topshirish («molChange»: komissiya majburiy, dalolatnoma INV-16 shaklida); INV-16 bosmasi 3 tilda (kassir tilxati, oxirgi order raqamlari, nominallar, blankalar, natija, rahbar qarori, komissiya imzolari); oy oxiri ro‘yxati — `kassa_month_check` («Davr» oynasi: 14 band — yopilmagan / bog‘lanmagan yozuvli kunlar to‘siq, tekshirilmagan kunlar, INV-16, kamomad, QT, Z, avanslar, limit, biriktirilmagan tushum, qaytarishlar, vedomost, surat, qulf; Direktor — «Oy oxiri surati va davrni yopish»); nazorat ro‘yxatida «Oylik komissiya inventarizatsiyasi» (tugagan oylarning oxirgi kuni). Sinov: SQL 43/43 (mutatsiya 42/42), node 8, brauzer k22. 2-qism (F2.8b, reliz 19): barcha pul jadvallari uchun oy qulfi (tizim mustasno) | F1.9, F1.16 | Qulflangan oyga yozuv rad; webhook’lar ishlaydi |
 | F2.9 | L | 5 | Huquqlar II (RF-09…12): detektor → revoke; provider `fix`; barcha pul RPC larida bayroq; xarajatlar (F2.1 dan keyin) — `expenses` ga hujjatsiz to‘g‘ridan-to‘g‘ri yozish o‘zgarishlar jurnalidan kuzatiladi, keyin `exp_ins` / `exp_upd` / `exp_del` faqat «payroll__» qatoriga | F1.13 | 7 kun 0 yozuv, keyin revoke |
 | F2.10 | M | 2 | 10 rol (buxgalter bilan) + anon REST RLS matritsasi | F2.9 | Barcha rad etishlar |
 | F2.11 | S | 0,5 | `refund_credit` (FD-25 talab qilsa) | F1.6 | — |
@@ -1215,7 +1216,7 @@ Ustuvorlik: **M0** — ishga tushirishdan oldin; **M1** — dastlabki oylarda; *
 | CL-10 | Kvitansiya daftarlari va «Қ» — qat’iy hisobdagi blankalar | BHMS 19, 5-band; 006 | yopish dalolatnomasi; oylik inventarizatsiya | M0 |
 | CL-11 | Shaxsiy ma’lumotni kamaytirish | D6 / D7 | RLS; ismsiz eksport | M0 |
 | CL-12 | Kun / oy qulfi | ichki nazorat | CT-04, CT-27; F2.8 | M0 |
-| CL-13 | Oylik komissiya inventarizatsiyasi (INV-16); moddiy javobgar almashganda inventarizatsiya | BHMS 19, 5, 8, 60–61-band | 30.12 sanash (31.12 holatiga); F2.8; topshirish-qabul | M1 |
+| CL-13 | Oylik komissiya inventarizatsiyasi (INV-16); moddiy javobgar almashganda inventarizatsiya | BHMS 19, 5, 8, 60–61-band | 30.12 sanash (31.12 holatiga); F2.8 ✅ (INV-16 — kunni yopishda va moddiy javobgar almashganda smena topshirishda); topshirish-qabul | M1 |
 | CL-14 | Natija o‘sha oyda; qaror rahbarda; aybdor bo‘lmasa — xarajat | BHMS 19, 69, 70, 72-band | CT-14; FD-21 | M0 |
 | CL-15 | Choraklik oziq-ovqat inventarizatsiyasi | BHMS 19, 5-band | 1010 (FD-31) | M1 |
 | CL-16 | Click / Uzum / QR fiskalizatsiyasi | VM 943, 1a-ilova | F0.5; F6.1 | M1 |

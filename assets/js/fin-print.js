@@ -43,6 +43,11 @@ const T = {
     verify: (a, aw, b, bw) => `Касса дафтаридаги ёзувларни текширдим ҳамда ${a} (${aw}) та кирим ва ${b} (${bw}) та чиқим ҳужжатини олдим.`,
     pre: { KO1: 'К', KO2: 'Ч', ACT: 'Д', OFS: 'ЎҲ', ADV: 'А' },
     cntTitle: 'КАССАДАГИ НАҚД ПУЛНИ САНАШ ДАЛОЛАТНОМАСИ',
+    inv: { title: 'НАҚД ПУЛ МАБЛАҒЛАРИНИ ИНВЕНТАРИЗАЦИЯ ҚИЛИШ ДАЛОЛАТНОМАСИ', form: 'ИНВ-16',
+      why: { monthly: 'ойлик инвентаризация (ойнинг охирги иш куни)', yearly: 'йиллик инвентаризация', mol: 'моддий жавобгар шахс алмашганда' },
+      receipt: 'ТИЛХАТ. Инвентаризация бошлангунига қадар барча кирим ва чиқим ҳужжатлари касса китобига киритилган, жавобгарлигимдаги барча пул маблағлари кирим қилинган, чиқимлари ҳисобдан чиқарилган.',
+      mol: 'Моддий жавобгар шахс (кассир)', blanks: 'Қатъий ҳисобдаги бланкалар («Қ» квитанциялари), фойдаланилмаган', pcs: 'та',
+      chair: 'Комиссия раиси', member: 'Комиссия аъзоси', decision: 'Инвентаризация натижалари бўйича раҳбар қарори' },
     cntKind: { close: 'кунни ёпишда', handover: 'сменани топшириш-қабул қилишда', opening: 'бошланғич қолдиқни аниқлашда', monthly: 'ойлик санаш', yearly: 'йиллик санаш', surprise: 'тўсатдан санаш' },
     commission: 'Комиссия', lastNos: 'Санаш пайтидаги охирги ҳужжат рақамлари', lastIn: 'кирим ордери', lastOut: 'чиқим ордери', none: 'йўқ',
     expected: 'Ҳисобдаги қолдиқ', pendingSum: 'Ҳали ўтказилмаган ёзувлар суммаси', diffFull: 'Фарқ (санаб чиқилган − ҳисобдаги − ўтказилмаган)',
@@ -92,6 +97,11 @@ const T = {
     verify: (a, aw, b, bw) => `Kassa daftaridagi yozuvlarni tekshirdim hamda ${a} (${aw}) ta kirim va ${b} (${bw}) ta chiqim hujjatini oldim.`,
     pre: { KO1: 'K', KO2: 'Ch', ACT: 'D', OFS: 'O‘H', ADV: 'A' },
     cntTitle: 'KASSADAGI NAQD PULNI SANASH DALOLATNOMASI',
+    inv: { title: 'NAQD PUL MABLAG‘LARINI INVENTARIZATSIYA QILISH DALOLATNOMASI', form: 'INV-16',
+      why: { monthly: 'oylik inventarizatsiya (oyning oxirgi ish kuni)', yearly: 'yillik inventarizatsiya', mol: 'moddiy javobgar shaxs almashganda' },
+      receipt: 'TILXAT. Inventarizatsiya boshlanguniga qadar barcha kirim va chiqim hujjatlari kassa kitobiga kiritilgan, javobgarligimdagi barcha pul mablag‘lari kirim qilingan, chiqimlari hisobdan chiqarilgan.',
+      mol: 'Moddiy javobgar shaxs (kassir)', blanks: 'Qat’iy hisobdagi blankalar («Қ» kvitansiyalari), foydalanilmagan', pcs: 'ta',
+      chair: 'Komissiya raisi', member: 'Komissiya a’zosi', decision: 'Inventarizatsiya natijalari bo‘yicha rahbar qarori' },
     cntKind: { close: 'kunni yopishda', handover: 'smenani topshirish-qabul qilishda', opening: 'boshlang‘ich qoldiqni aniqlashda', monthly: 'oylik sanash', yearly: 'yillik sanash', surprise: 'to‘satdan sanash' },
     commission: 'Komissiya', lastNos: 'Sanash paytidagi oxirgi hujjat raqamlari', lastIn: 'kirim orderi', lastOut: 'chiqim orderi', none: 'yo‘q',
     expected: 'Hisobdagi qoldiq', pendingSum: 'Hali o‘tkazilmagan yozuvlar summasi', diffFull: 'Farq (sanab chiqilgan − hisobdagi − o‘tkazilmagan)',
@@ -141,6 +151,11 @@ const T = {
     verify: (a, aw, b, bw) => `Записи в кассовой книге проверил и документы в количестве ${a} (${aw}) приходных и ${b} (${bw}) расходных получил.`,
     pre: { KO1: 'П', KO2: 'Р', ACT: 'А', OFS: 'ВЗ', ADV: 'АО' },
     cntTitle: 'АКТ ПЕРЕСЧЁТА НАЛИЧНЫХ ДЕНЕГ В КАССЕ',
+    inv: { title: 'АКТ ИНВЕНТАРИЗАЦИИ НАЛИЧНЫХ ДЕНЕЖНЫХ СРЕДСТВ', form: 'ИНВ-16',
+      why: { monthly: 'ежемесячная инвентаризация (последний рабочий день месяца)', yearly: 'годовая инвентаризация', mol: 'при смене материально ответственного лица' },
+      receipt: 'РАСПИСКА. К началу проведения инвентаризации все приходные и расходные документы на денежные средства внесены в кассовую книгу, все денежные средства, поступившие на мою ответственность, оприходованы, а выбывшие списаны в расход.',
+      mol: 'Материально ответственное лицо (кассир)', blanks: 'Бланки строгой отчётности (квитанции «Қ»), неиспользованные', pcs: 'шт.',
+      chair: 'Председатель комиссии', member: 'Член комиссии', decision: 'Решение руководителя по результатам инвентаризации' },
     cntKind: { close: 'при закрытии дня', handover: 'при приёме-передаче смены', opening: 'при определении начального остатка', monthly: 'ежемесячный пересчёт', yearly: 'годовой пересчёт', surprise: 'внезапный пересчёт' },
     commission: 'Комиссия', lastNos: 'Последние номера документов на момент пересчёта', lastIn: 'приходный ордер', lastOut: 'расходный ордер', none: 'нет',
     expected: 'Остаток по учёту', pendingSum: 'Сумма ещё не проведённых записей', diffFull: 'Расхождение (пересчитано − по учёту − не проведено)',
@@ -912,12 +927,20 @@ export function countHtml(count, book, ctx, W) {
   const holderUid = count.kind === 'handover' ? count.fromUid : (count.cashierUid || d.cashierUid);
   const cashier = count.kind === 'handover' ? '' : (cn(holderUid) || cn(count.byUid));
   const counter = count.byUid && holderUid && count.byUid !== holderUid ? cn(count.byUid) : '';
-  return page(t.cntTitle, t, `<div class="pg act">
+  // F2.8 (INV-16): komissiya inventarizatsiyasi — oylik / yillik sanash (kunni yopishda) va moddiy javobgar shaxs almashganda (smena
+  //   topshirishda): sarlavha va shakl kodi, sababi, moddiy javobgar shaxsning tilxati (sanashdan oldin), qat'iy hisobdagi blankalar,
+  //   komissiya imzolari (birinchisi — rais), natija bo'yicha rahbar qarori qatori
+  const isInv = count.kind === 'monthly' || count.kind === 'yearly' || (count.kind === 'handover' && !!count.molChange);
+  const iv = t.inv || T['uz-cyrl'].inv, title = isInv ? iv.title : t.cntTitle;
+  const bl = isInv && count.blanks && typeof count.blanks === 'object' ? count.blanks : null;
+  return page(title, t, `<div class="pg act">
     <div class="hd">${orgBlock(o, t, lang)}${marksHtml(marks)}</div>
-    <div class="ttl">${esc(t.cntTitle)}</div>
-    <div class="dt">${esc(t.dayFor(W.fmtDateLong(day, lang)))}${t.cntKind[count.kind] ? ' — ' + esc(t.cntKind[count.kind]) : ''}</div>
+    ${isInv ? `<div class="dt" style="text-align:right">${esc(iv.form)}</div>` : ''}
+    <div class="ttl">${esc(title)}</div>
+    <div class="dt">${esc(t.dayFor(W.fmtDateLong(day, lang)))}${isInv ? ' — ' + esc(iv.why[count.kind === 'handover' ? 'mol' : count.kind]) : (t.cntKind[count.kind] ? ' — ' + esc(t.cntKind[count.kind]) : '')}</div>
     ${times.length ? `<div class="dt">${times.map(x => esc(x[0] + ': ' + x[1])).join(' · ')}</div>` : ''}
     ${comm.length ? `<p><b>${esc(t.commission)}:</b> ${comm.map(m => esc([m.title, m.name].filter(Boolean).join(' — '))).join('; ')}</p>` : ''}
+    ${isInv ? `<p>${esc(iv.receipt)}</p>${sig(iv.mol, count.kind === 'handover' ? fromName : cashier)}` : ''}
     ${count.kind === 'opening' ? '' : `<p>${esc(t.lastNos)}: ${esc(t.lastIn)} ${esc(last('KO1'))}, ${esc(t.lastOut)} ${esc(last('KO2'))}.</p>`}
     <table class="t"><tbody>
       <tr><td>${esc(t.expected)}</td><td class="r" style="width:45mm">${esc(money(W, count.expected))}</td></tr>
@@ -929,10 +952,11 @@ export function countHtml(count, book, ctx, W) {
     ${den.length ? `<table class="t" style="width:110mm"><thead><tr><th>${esc(t.nominal)}</th><th>${esc(t.qty)}</th><th>${esc(t.sum)}</th></tr></thead><tbody>
       ${den.map(x => `<tr><td class="r">${esc(money(W, x[0]))}</td><td class="r">${esc(String(x[1]))}</td><td class="r">${esc(money(W, x[0] * x[1]))}</td></tr>`).join('')}
       <tr><td colspan="2"><b>${esc(t.total)}</b></td><td class="r"><b>${esc(money(W, den.reduce((s, x) => s + x[0] * x[1], 0)))}</b></td></tr></tbody></table>` : ''}
+    ${bl ? `<p>${esc(iv.blanks)}: ${esc(String(num(bl.count)))} ${esc(iv.pcs)}${bl.nos ? ' (№ ' + esc(bl.nos) + ')' : ''}.</p>` : ''}
     <p><b>${esc(res)}</b></p>
     ${count.note ? `<p>${esc(t.note)}: ${esc(count.note)}</p>` : ''}
-    ${diff < 0 ? `<p>${esc(t.explain)}:</p><div class="ln"></div><div class="ln"></div><p>${esc(t.decision)}:</p><div class="ln"></div>` : ''}
-    ${comm.map(m => sig(m.title || t.member, m.name)).join('')}
+    ${diff < 0 ? `<p>${esc(t.explain)}:</p><div class="ln"></div><div class="ln"></div>` : ''}${diff < 0 || isInv ? `<p>${esc(isInv ? iv.decision : t.decision)}:</p><div class="ln"></div>` : ''}
+    ${comm.map((m, i) => sig(m.title || (isInv ? (i === 0 ? iv.chair : iv.member) : t.member), m.name)).join('')}
     ${count.kind === 'handover' ? sig(t.handFrom, fromName) + sig(t.handTo, toName) : sig(t.cashier, cashier)}
     ${counter ? sig(t.countedBy, counter) : ''}
     ${footer({ id: count.id }, ctx, t)}</div>`);

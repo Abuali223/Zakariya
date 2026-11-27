@@ -324,6 +324,15 @@ alter table public.cash_handovers add column if not exists "lastKo2" int;
 -- Qurilma navbatidagi hali o'tkazilmagan yozuvlar (state-2): topshiruvchi e'lon qilgani [{ref, amount}] — yozish paytida serverda hali yo'q
 --   bo'lganlari ("pendingSum" — ularning jami). Qabulda sanash dalolatnomasiga o'zgarmay o'tadi (kutilayotgan paytda order yozilmaydi).
 alter table public.cash_handovers add column if not exists "pendingRefs" jsonb not null default '[]'::jsonb;
+-- Komissiya inventarizatsiyasi (F2.8, INV-16; BHMS 19; 2-buyruq): oylik / yillik sanash — kunni yopishda (cash_counts.kind 'monthly' /
+--   'yearly'), moddiy javobgar shaxs almashganda — smena topshirishda ("molChange": yangi kassir, uzoq ta'til, ishdan ketish; komissiya
+--   majburiy). blanks — sanash paytida kassadagi foydalanilmagan qat'iy hisobdagi blankalar («Қ» kvitansiyalari): {count, nos} (faqat
+--   komissiya inventarizatsiyasida; blanka yo'q — count 0). Yozilgach o'zgarmaydi (cash_counts — faqat qo'shiladi; cash_handovers —
+--   qo'riqchi triggeri).
+alter table public.cash_counts add column if not exists "molChange" boolean not null default false;
+alter table public.cash_counts add column if not exists blanks jsonb;
+alter table public.cash_handovers add column if not exists "molChange" boolean not null default false;
+alter table public.cash_handovers add column if not exists blanks jsonb;
 
 -- Xeshli suratlar (31.12 holati va b.) — keyin o'zgarmaydi.
 create table if not exists public.fin_snapshots (

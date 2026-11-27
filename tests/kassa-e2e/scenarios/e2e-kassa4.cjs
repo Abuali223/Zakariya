@@ -71,7 +71,7 @@ const allErrs = [];
     // sahifa yangi sozlamalar bilan qayta chizilguncha kutamiz (aks holda oldingi yuklashdagi karta o'qiladi)
     await s.pg.waitForFunction(() => !/deb belgilanmagan/.test(document.querySelector('#ks-body').textContent), null, { timeout: 15000 });
     const c = await s.ctl();
-    // ko'rik tuzatishlaridan keyin 31 qator (F2.13: qaror kutayotgan qayta tasnif so'rovlari; + qabul qilinmagan smena, Z yopilgach o'zgartirilgan, kontragent turi, hali kelmagan yozuvlar,
+    // ko'rik tuzatishlaridan keyin 31 qator (+ F2.8: oylik komissiya inventarizatsiyasi — 33; F2.13: qaror kutayotgan qayta tasnif so'rovlari; + qabul qilinmagan smena, Z yopilgach o'zgartirilgan, kontragent turi, hali kelmagan yozuvlar,
     //   xodimlar zimmasidagi kamomad, bog'lanmagan hisoblar, ishga tushishdan oldingi yozuvlar, to'xtatish / qayta ishga tushirish).
     //   Urug'da: Moliya menejeri hisobi xodim kartasiga bog'lanmagan (sec-4 — «diqqat») va ishga tushish kunidan oldingi sanali naqd
     //   xarajatlar shu kuni kiritilgan (crit-1 — «ma'lumot»); qolgani joyida. Ism va summalar — bazadan.
@@ -79,8 +79,9 @@ const allErrs = [];
     const [preN, preS] = q(`select count(*) || ':' || coalesce(sum(amount), 0)::bigint from public.expenses e where e.date between to_char(date '${today}' - 400, 'YYYY-MM-DD') and to_char(date '${today}' - 1, 'YYYY-MM-DD')
       and coalesce(e.method, '') in ('', 'cash') and e."cashDocId" is null and coalesce(e.id, '') not like 'payroll\\_\\_%' and e."createdAt" >= ('${today}'::timestamp at time zone 'Asia/Tashkent')`).split(':');
     const notOk = Object.entries(c).filter(x => x[1].level !== 'ok').map(([k, x]) => k + ':' + x.level).sort().join(',');
-    ok('direktor: nazorat ro‘yxati ko‘rinadi — 32 tekshiruv (F2.13: «QT so‘rovlari»; Sh-8 B15: «Bankka topshirish» — bugungi kun jadvalda, o‘tkazib yuborilgani yo‘q); joyida bo‘lmagani faqat: bog‘lanmagan MM hisobi (diqqat) va ishga tushishdan oldingi sanali xarajatlar (ma’lumot)',
-      Object.keys(c).length === 32 && c.fixPending && c.fixPending.level === 'ok' && c.deposit && c.deposit.level === 'ok' && c.deposit.text.includes(`har ${DOW} — o‘z vaqtida`)
+    ok('direktor: nazorat ro‘yxati ko‘rinadi — 33 tekshiruv (F2.13: «QT so‘rovlari»; Sh-8 B15: «Bankka topshirish» — bugungi kun jadvalda, o‘tkazib yuborilgani yo‘q; F2.8: «Oylik komissiya inventarizatsiyasi» — kamchilik yo‘q); joyida bo‘lmagani faqat: bog‘lanmagan MM hisobi (diqqat) va ishga tushishdan oldingi sanali xarajatlar (ma’lumot)',
+      Object.keys(c).length === 33 && c.fixPending && c.fixPending.level === 'ok' && c.deposit && c.deposit.level === 'ok' && c.deposit.text.includes(`har ${DOW} — o‘z vaqtida`)
+      && c.inv && c.inv.level === 'ok' && c.inv.text.includes('kamchilik yo‘q')
       && notOk === 'preLive:info,unlinked:warn' && c.unlinked.text.endsWith(`diqqat ${mmName} (moliya menejeri)`)
       && Number(preN) > 0 && c.preLive.text.endsWith(`ma’lumot xarajat: ${preN} ta · ${fmt(preS)} so‘m`) && c.preLive.text.includes(`ishga tushgan kundan (${dm}) oldin`)
       && ['staleHandover', 'zChanged', 'cpKinds', 'pending', 'damage', 'restart', 'zreport', 'orgCash'].every(k => c[k] && c[k].level === 'ok')

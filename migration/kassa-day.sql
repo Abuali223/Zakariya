@@ -9,7 +9,8 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   kassa_opening_set(p)        — boshlang'ich qoldiq (komissiya sanashi) va birinchi kassa kuni: FAQAT Direktor, kassa ishga tushguncha;
 --                                 to'xtatilgan kassada — qayta ishga tushirish qoldig'i va farq dalolatnomasi (ishga-tushirish §9);
 --   app.kassa_golive_guard(...) — «ishga tushadigan kun» o'zgarishi (fin_org_set): to'xtatish va qayta ishga tushirish shartlari (ui-5);
---   kassa_day_close(p)          — kunni SANAB yopish: farq (sanalgan − hisobdagi − hali o'tkazilmagan) shu kun sanasi bilan tizim
+--   kassa_day_close(p)          — kunni SANAB yopish (oyning oxirgi ish kunida — oylik komissiya inventarizatsiyasi, INV-16, F2.8):
+--                                 farq (sanalgan − hisobdagi − hali o'tkazilmagan) shu kun sanasi bilan tizim
 --                                 hujjatiga aylanadi (kamomad KO-2 Dt 5910, ortiqcha KO-1 Kt 9390), varaqlar va xesh muzlaydi; hali
 --                                 o'tkazilmagan yozuvlar — qurilma navbati ro'yxati (kalit bilan; keyin kech kirim orderiga bog'lanadi)
 --                                 va «Қ» blankalari (state-2, crit-3); oyna ko'rsatgan qoldiq o'zgargan bo'lsa — rad (kassa:stale);
@@ -30,6 +31,9 @@ do $iqror_guard$ begin raise exception 'iqror: kassa-day.sql ALOHIDA ishga tushi
 --   kassa_journal_export(...)   — KO-3 Excel uchun ma'lumot (FD-28): kassirga yo'q, 2-ro'yxatga ismsiz, Direktorga to'liq;
 --   kassa_matrix(desk, month)   — RP-08: oylik statiya matritsasi (statiya × kun; kunlik jamlar va qoldiq; chop etish va XLSX — sahifada);
 --   kassa_month_pack(desk, month) — buxgalter uchun oylik kassa to'plami (E1–E4: KO-3, matritsa, kassa kunlari, hisobdorlar; FD-28);
+--   kassa_pay_sheet(party, year) — xodimning o'quv yili ish haqi to'lov qaydnomasi (F2.14, Sh-8 B17);
+--   kassa_month_check(desk, month) — oy oxiri ro'yxati (F2.8): yopilmagan / tekshirilmagan kunlar, oylik komissiya inventarizatsiyasi
+--                                 (INV-16), qarorsiz kamomad, Z-hisobot, avanslar, biriktirilmagan tushumlar, vedomost, surat va davr qulfi;
 --   kassa_kpi(desk, weeks)      — RP-22 haftalik ko'rsatkichlar (o'z vaqtida yopilgan kunlar, tekshirilmagan, farqlar, EX-49 ulushi,
 --                                 muddati o'tgan avanslar) — Direktor va 2-ro'yxat; dushanba kungi Telegram hisobotida o'tgan hafta;
 --   kassa_checks(desk)          — nazorat ro'yxati, RP-06 (raqam bo'shliqlari, yopilmagan / tekshirilmagan kunlar, qarorsiz kamomad,
@@ -123,6 +127,26 @@ language sql immutable set search_path = public, app, pg_temp as $$
                     where jsonb_typeof(m) = 'object' and length(btrim(coalesce(m ->> 'name', ''))) >= 3), '[]'::jsonb)
 $$;
 revoke all on function app.kassa_commission(jsonb) from public, anon, authenticated;
+
+-- Komissiya inventarizatsiyasi (F2.8, INV-16): kassadagi foydalanilmagan qat'iy hisobdagi blankalar («Қ» kvitansiyalari) — {count, nos}:
+--   soni (butun son; blanka yo'q — 0) va raqamlari (soni > 0 bo'lsa majburiy, masalan «0012–0050»). Berilmagan — NULL (dalolatnomada qator yo'q).
+create or replace function app.kassa_blanks(p jsonb) returns jsonb
+language plpgsql immutable set search_path = public, app, pg_temp as $$
+declare v_cnt int; v_nos text;
+begin
+  if p is null or jsonb_typeof(p) = 'null' then return null; end if;
+  if jsonb_typeof(p) <> 'object' then
+    raise exception 'Qat''iy hisobdagi blankalar ma''lumoti noto''g''ri' using errcode = '22023', hint = 'kassa:blanks';
+  end if;
+  begin v_cnt := nullif(btrim(coalesce(p ->> 'count', '')), '')::int; exception when others then v_cnt := -1; end;
+  v_nos := left(btrim(coalesce(p ->> 'nos', '')), 300);
+  if v_cnt is null and v_nos = '' then return null; end if;
+  if v_cnt is null or v_cnt < 0 or v_cnt > 100000 or (v_cnt > 0 and v_nos = '') or (v_cnt = 0 and v_nos <> '') then
+    raise exception 'Qat''iy hisobdagi blankalar: soni (butun son) va raqamlari birga kiritiladi; blanka yo''q bo''lsa — 0' using errcode = '22023', hint = 'kassa:blanks';
+  end if;
+  return jsonb_build_object('count', v_cnt, 'nos', v_nos);
+end $$;
+revoke all on function app.kassa_blanks(jsonb) from public, anon, authenticated;
 
 -- ---------- Hali o'tkazilmagan yozuvlar (state-2, crit-3) ----------
 -- Qurilma navbati (oflayn) yozuvlari — mijoz yuboradi: [{ref: to'lov kaliti (record_manual_payment payId, 'man_…'), amount}]. Avval
@@ -234,16 +258,21 @@ revoke all on function app.kassa_pending_merge(text, jsonb, numeric) from public
 --   state-2, crit-3: p_pending — hali o'tkazilmagan yozuvlar jami; tarkibi sanash dalolatnomasida saqlanadi — p_refs (qurilma navbati
 --   yozuvlari, sanash paytida serverda hali yo'q bo'lganlari: [{ref, amount}]) va p_paper («Қ» blankalari: {count, sum, nos}; faqat kunni
 --   yopishda); farq hujjati suratida ham ("pendingRefs", "paper").
+--   F2.8 (INV-16): komissiya inventarizatsiyasi — p_kind 'monthly' / 'yearly' (oylik / yillik sanash, kunni yopishda) yoki p_mol (moddiy
+--   javobgar shaxs almashganda, smena topshirishda): dalolatnoma va farq hujjati asosi — «inventarizatsiya qilish dalolatnomasi (INV-16)»;
+--   p_blanks — foydalanilmagan qat'iy hisobdagi blankalar (app.kassa_blanks; faqat komissiya inventarizatsiyasida).
 drop function if exists app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text);   -- avvalgi ta'rif (kassa egasisiz)
 drop function if exists app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, text, text, text, text, text, text);   -- avvalgi ta'rif (navbat yozuvlarisiz)
+drop function if exists app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, jsonb, jsonb, text, text, text, text, text, text);   -- avvalgi ta'rif (INV-16 belgisisiz)
 create or replace function app.kassa_count_apply(p_desk text, p_day_id text, p_day date, p_kind text, p_counted numeric, p_pending numeric,
                                                  p_refs jsonb, p_paper jsonb, p_denoms jsonb, p_commission jsonb, p_note text, p_uid text,
-                                                 p_holder text, p_by text, p_to_uid text, p_handover text,
+                                                 p_holder text, p_by text, p_to_uid text, p_handover text, p_mol boolean, p_blanks jsonb,
                                                  out o_expected numeric, out o_diff numeric, out o_doc_id text, out o_count_id text)
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_names jsonb := app.kassa_names(array[p_holder, p_by, p_to_uid]); v_others text[];
         v_refs jsonb := case when jsonb_typeof(p_refs) = 'array' then p_refs else '[]'::jsonb end;
         v_pc int := coalesce((p_paper ->> 'count')::int, 0); v_ps numeric := coalesce((p_paper ->> 'sum')::numeric, 0);
+        v_inv boolean := p_kind in ('monthly', 'yearly') or coalesce(p_mol, false);
 begin
   o_expected := app.kassa_day_balance(p_day_id);
   if p_counted < p_pending then
@@ -258,10 +287,15 @@ begin
         'desk', p_desk, 'op', case when o_diff > 0 then 'in_surplus' else 'out_shortage' end, 'amount', abs(o_diff),
         'clientRef', 'sysdiff_' || replace(gen_random_uuid()::text, '-', ''), 'isSystem', true,
         'partyName', case when o_diff > 0 then 'Kassa ortiqchasi' else 'Kassa kamomadi' end,
-        'basis', 'Kassani sanash dalolatnomasi, ' || to_char(p_day, 'DD.MM.YYYY'),
-        'note', case p_kind when 'handover' then 'Smena topshirish-qabul sanashi' else 'Kun yopish sanashi' end,
+        'basis', case when v_inv then 'Kassani inventarizatsiya qilish dalolatnomasi (INV-16), ' else 'Kassani sanash dalolatnomasi, ' end || to_char(p_day, 'DD.MM.YYYY'),
+        'note', case p_kind when 'handover' then case when coalesce(p_mol, false) then 'Moddiy javobgar shaxs almashganda inventarizatsiya (smena topshirish-qabul)'
+                                                      else 'Smena topshirish-qabul sanashi' end
+                            when 'monthly' then 'Oylik komissiya inventarizatsiyasi (kun yopish)'
+                            when 'yearly' then 'Yillik komissiya inventarizatsiyasi (kun yopish)'
+                            else 'Kun yopish sanashi' end,
         'sourceSnapshot', jsonb_strip_nulls(jsonb_build_object('cashierUid', p_holder, 'countedBy', p_by, 'toUid', p_to_uid, 'handoverId', p_handover,
                                                                'expected', o_expected, 'counted', p_counted, 'pending', p_pending, 'kind', p_kind,
+                                                               'molChange', case when coalesce(p_mol, false) then true end,
                                                                'pendingRefs', case when jsonb_array_length(v_refs) > 0 then v_refs end,
                                                                'paper', case when v_pc > 0 then jsonb_build_object('count', v_pc, 'sum', v_ps, 'nos', p_paper ->> 'nos') end,
                                                                'others', case when cardinality(v_others) > 0 then to_jsonb(v_others) end,
@@ -271,12 +305,13 @@ begin
   end if;
   o_count_id := 'cc_' || replace(gen_random_uuid()::text, '-', '');
   insert into public.cash_counts (id, desk, day, "dayId", kind, expected, counted, "pendingSum", diff, "diffDocId", denoms, commission, "fromUid", "toUid", note, "byUid",
-                                  "cashierUid", "handoverId", names, at, "pendingRefs", "paperCount", "paperSum", "paperNos")
+                                  "cashierUid", "handoverId", names, at, "pendingRefs", "paperCount", "paperSum", "paperNos", "molChange", blanks)
     values (o_count_id, p_desk, p_day, p_day_id, p_kind, o_expected, p_counted, p_pending, o_diff, o_doc_id, p_denoms, p_commission,
             case when p_kind = 'handover' then p_holder end, p_to_uid, left(btrim(coalesce(p_note, '')), 500), p_by,
-            p_holder, p_handover, v_names, clock_timestamp(), v_refs, v_pc, v_ps, coalesce(p_paper ->> 'nos', ''));
+            p_holder, p_handover, v_names, clock_timestamp(), v_refs, v_pc, v_ps, coalesce(p_paper ->> 'nos', ''),
+            coalesce(p_mol, false) and p_kind = 'handover', case when v_inv then p_blanks end);
 end $$;
-revoke all on function app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, jsonb, jsonb, text, text, text, text, text, text) from public, anon, authenticated;
+revoke all on function app.kassa_count_apply(text, text, date, text, numeric, numeric, jsonb, jsonb, jsonb, jsonb, text, text, text, text, text, text, boolean, jsonb) from public, anon, authenticated;
 
 -- Kamomad «xodim zimmasiga» bo'lsa — standart javobgar (sec-2, sec-4): FAQAT kassa egasi pulni o'zi sanagan (hujjat suratida
 --   "cashierUid" = "countedBy") va shu davrda kassaga boshqa hech kim tegmagan bo'lsa (g6v-1: "others" — kassa egasidan boshqa kassa orderi
@@ -463,6 +498,11 @@ language sql stable security definer set search_path = public, app, pg_temp as $
            --   har biri (vaqt tartibida, 0 lari tashlanadi). Yopish farqi — "diff"; kun farqi ko'rsatkichlari ikkalasidan
            'handoverDiff', coalesce((select sum(n.diff) from public.cash_counts n where n."dayId" = d.id and n.kind = 'handover'), 0),
            'handoverDiffs', coalesce((select jsonb_agg(n.diff order by n.at, n.id) from public.cash_counts n where n."dayId" = d.id and n.kind = 'handover' and n.diff <> 0), '[]'::jsonb),
+           -- F2.8 (INV-16): kun oylik / yillik komissiya inventarizatsiyasi bilan yopilgan bo'lsa — 'monthly' / 'yearly' (oxirgi yopish sanashi
+           --   bo'yicha: qayta ochilib oddiy yopilgan kunda — yo'q; ochiq kunda — yo'q)
+           'invKind', case when d.status <> 'open'
+                           then (select case when n.kind in ('monthly', 'yearly') then n.kind end from public.cash_counts n
+                                  where n."dayId" = d.id and n.kind in ('close', 'monthly', 'yearly') order by n.at desc, n.id desc limit 1) end,
            -- g6v-2: smena topshirishda sanalgan orderlar — qabul qilingan topshirishlar yozilgan paytdagi eng katta KO-1 / KO-2 raqamlari
            --   (shu raqamgacha orderni kassir bekor qilmaydi — kassa-docs.sql: kassa_doc_void; sahifa «Bekor» tugmasini ko'rsatmaydi)
            'countedKo1', (select max(h."lastKo1") from public.cash_handovers h where h."dayId" = d.id and h.status = 'accepted'),
@@ -840,7 +880,10 @@ revoke all on function app.kassa_golive_guard(date, date) from public, anon, aut
 --        navbat yozuvlari (o'quv to'lovi) faqat asosiy kassaga tushadi — sinov kassasida ro'yxat bo'sh bo'lmasa rad (js-3, kassa:pending_test);
 --      paper — server ishlamagan paytdagi, hali kiritilmagan «Қ» blankalari {count, sum, nos} (crit-3; soni, summasi va raqamlari birga);
 --      note, commission [{title, name}],
---      z — onlayn kassa Z-hisoboti {no, cash, card} yoki {missing: true, reason} (ixtiyoriy; sinov kassasida e'tiborga olinmaydi)
+--      z — onlayn kassa Z-hisoboti {no, cash, card} yoki {missing: true, reason} (ixtiyoriy; sinov kassasida e'tiborga olinmaydi),
+--      inv — true: oylik komissiya inventarizatsiyasi (F2.8, INV-16; 2-buyruq: har oyning oxirgi ish kuni) — kamida 2 kishilik komissiya
+--        (rais va a'zo); sanash dalolatnomasi turi 'monthly' (dekabrda — 'yearly'); blanks — foydalanilmagan qat'iy hisobdagi blankalar
+--        {count, nos} (app.kassa_blanks; faqat inv bilan)
 --   Avvalgi pendingCount / pendingSum (ro'yxatsiz soni va summasi — server tekshira olmasdi) endi qabul qilinmaydi (kassa:pending_refs).
 --   Kassa egasi (kun kassiri, "cashierUid") yopadi. Boshqa kassir (g'aznachi), Direktor yoki Moliya menejeri — kassir o'rniga, kamida
 --   2 kishilik komissiya bilan (sec-2; kassa egasi hali aniqlanmagan kunni kassa operatori o'zi yopadi). Smena topshirish kutilayotganda
@@ -853,6 +896,7 @@ declare
   v_rec numeric; v_pay numeric; v_docs int; v_f1 int; v_l1 int; v_f2 int; v_l2 int; v_rows int; v_sheets int; v_from int;
   v_op boolean := app.kassa_operator(); v_holder text;
   v_seen numeric; v_all jsonb; v_refs jsonb; v_ign jsonb; v_rsum numeric; v_qcnt int := 0; v_qsum numeric := 0; v_qnos text := ''; v_paper jsonb;
+  v_inv boolean; v_kind text := 'close'; v_blanks jsonb;
 begin
   if not (v_op or app.is_admin() or app.is_finance_mgr()) then
     raise exception 'Ruxsat yo''q: kunni kassir yopadi' using errcode = '42501';
@@ -896,6 +940,16 @@ begin
   if not v_op and jsonb_array_length(v_comm) < 2 then   -- kassir o'rniga yopish: 2 kishilik dalolatnoma
     raise exception 'Kassir o''rniga yopishda kamida 2 kishilik komissiya ko''rsatiladi' using errcode = '22023', hint = 'kassa:commission';
   end if;
+  -- F2.8 (INV-16): oylik komissiya inventarizatsiyasi — komissiya majburiy; qat'iy hisobdagi blankalar faqat shunda yoziladi
+  v_inv := app.kassa_bool(p, 'inv');
+  v_blanks := app.kassa_blanks(p -> 'blanks');
+  if v_blanks is not null and not v_inv then
+    raise exception 'Qat''iy hisobdagi blankalar faqat komissiya inventarizatsiyasida (oylik sanash) yoziladi' using errcode = '22023', hint = 'kassa:blanks';
+  end if;
+  if v_inv and jsonb_array_length(v_comm) < 2 then
+    raise exception 'Oylik komissiya inventarizatsiyasida kamida 2 kishilik komissiya ko''rsatiladi (rais va a''zo — doimiy inventarizatsiya komissiyasi)'
+      using errcode = '22023', hint = 'kassa:commission';
+  end if;
 
   perform app.kassa_lock_desk(v_desk);
   select * into v_d from public.cash_days d where d.desk = v_desk and d.status = 'open' for update;
@@ -912,6 +966,7 @@ begin
   if v_d.day > app.fin_today() then
     raise exception 'Server sanasi ochiq kassa kunidan oldin — soatni tekshiring' using errcode = 'P0001', hint = 'kassa:clock';
   end if;
+  if v_inv then v_kind := case when extract(month from v_d.day) = 12 then 'yearly' else 'monthly' end; end if;
   perform app.kassa_handover_block(v_desk);   -- state-6: smena topshirish kutilmoqda — avval qabul qilinadi yoki bekor qilinadi
   -- sec-2: kassa egasi bo'lmagan kassir (g'aznachi) yopsa — kassir o'rniga: 2 kishilik dalolatnoma (Direktor / Moliya menejeri — yuqorida).
   --   Kassa egasi hali aniqlanmagan kunni (faqat Direktor / Moliya menejeri hujjatlari) kassa operatori o'zi yopadi — u kassa egasi.
@@ -941,8 +996,8 @@ begin
     perform app.kassa_z_put(v_d.id, p -> 'z', v_uid);
   end if;
   select c.o_expected, c.o_diff, c.o_doc_id, c.o_count_id into v_exp, v_diff, v_doc_id, v_cnt_id
-    from app.kassa_count_apply(v_desk, v_d.id, v_d.day, 'close', v_counted, v_pending, v_refs, v_paper, v_denoms, v_comm, v_note, v_uid,
-                               v_holder, v_uid, null, null) c;
+    from app.kassa_count_apply(v_desk, v_d.id, v_d.day, v_kind, v_counted, v_pending, v_refs, v_paper, v_denoms, v_comm, v_note, v_uid,
+                               v_holder, v_uid, null, null, false, v_blanks) c;
   select coalesce(sum(c.amount) filter (where c.status = 'posted' and c.form = 'KO1'), 0),
          coalesce(sum(c.amount) filter (where c.status = 'posted' and c.form = 'KO2'), 0),
          count(*), min(c.no) filter (where c.form = 'KO1'), max(c.no) filter (where c.form = 'KO1'),
@@ -968,7 +1023,7 @@ begin
   insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", reason, data)
     values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_desk, v_d.day, 'close', v_uid, v_note,
             jsonb_build_object('expected', v_exp, 'counted', v_counted, 'pendingSum', v_pending, 'diff', v_diff, 'diffDocId', v_doc_id, 'countId', v_cnt_id,
-                               'cashierUid', v_holder, 'pendingRefs', v_refs, 'paper', v_paper, 'ignoredRefs', v_ign));
+                               'cashierUid', v_holder, 'pendingRefs', v_refs, 'paper', v_paper, 'ignoredRefs', v_ign, 'countKind', v_kind));
   perform app.kassa_flag(false);
   -- ignoredRefs — e'lon qilingan, lekin shu payt allaqachon o'tgan navbat yozuvlari (qoldiqda bor — sanashdan ayirilmadi)
   return jsonb_build_object('ok', true, 'dup', false, 'day', app.kassa_day_json(v_d.id), 'expected', v_exp, 'diff', v_diff,
@@ -993,13 +1048,16 @@ grant execute on function public.kassa_day_close(jsonb) to authenticated;
 --      hali yuborilmagan naqd to'lovlar [{ref, amount}] (kunni yopishdagi kabi: o'tganlari tushib qoladi, qolganlari topshirishda saqlanadi
 --      va qabulda dalolatnomaga o'tadi; shu kungi oldingi topshirishlarda e'lon qilingan, hali kelmaganlarini server qo'shadi — sanalgan
 --      pulga sig'ganicha, g7v-3). Avvalgi ro'yxatsiz pendingSum — qabul qilinmaydi (kassa:pending_refs); sinov kassasida navbat yozuvlari —
---      rad (js-3, kassa:pending_test: ular asosiy kassaga tushadi).
+--      rad (js-3, kassa:pending_test: ular asosiy kassaga tushadi);
+--      mol — true: moddiy javobgar shaxs almashadi (F2.8, INV-16; BHMS 19: yangi kassir, uzoq ta'til, ishdan ketish) — komissiya
+--      inventarizatsiyasi: kamida 2 kishilik komissiya (kassa egasining o'zi topshirsa ham), dalolatnoma INV-16 shaklida; blanks —
+--      foydalanilmagan qat'iy hisobdagi blankalar {count, nos} (faqat mol bilan). Kassir ↔ o'rinbosar smenasi — oddiy topshirish (3-buyruq).
 create or replace function public.kassa_handover(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare
   v_uid text := app.uid(); v_op boolean := app.kassa_operator(); v_desk text; v_d public.cash_days%rowtype; v_counted numeric; v_pending numeric;
   v_denoms jsonb; v_to text; v_note text; v_comm jsonb; v_holder text; v_from text; v_h public.cash_handovers%rowtype; v_exp numeric;
-  v_seen numeric; v_all jsonb; v_refs jsonb; v_ign jsonb;
+  v_seen numeric; v_all jsonb; v_refs jsonb; v_ign jsonb; v_mol boolean; v_blanks jsonb;
 begin
   if not (v_op or app.is_admin()) then
     raise exception 'Ruxsat yo''q: smenani kassir topshiradi' using errcode = '42501';
@@ -1022,6 +1080,16 @@ begin
   v_note := left(btrim(coalesce(p ->> 'note', '')), 500);
   v_comm := app.kassa_commission(p -> 'commission');
   v_to := nullif(btrim(coalesce(p ->> 'toUid', '')), '');
+  -- F2.8 (INV-16): moddiy javobgar shaxs almashganda — komissiya inventarizatsiyasi (komissiya majburiy; blankalar faqat shunda)
+  v_mol := app.kassa_bool(p, 'mol');
+  v_blanks := app.kassa_blanks(p -> 'blanks');
+  if v_blanks is not null and not v_mol then
+    raise exception 'Qat''iy hisobdagi blankalar faqat komissiya inventarizatsiyasida (moddiy javobgar shaxs almashganda) yoziladi' using errcode = '22023', hint = 'kassa:blanks';
+  end if;
+  if v_mol and jsonb_array_length(v_comm) < 2 then
+    raise exception 'Moddiy javobgar shaxs almashganda kassa komissiya bilan inventarizatsiya qilinadi: kamida 2 kishilik komissiya ko''rsatiladi'
+      using errcode = '22023', hint = 'kassa:commission';
+  end if;
   perform app.kassa_lock_desk(v_desk);
   select * into v_d from public.cash_days d where d.desk = v_desk and d.status = 'open' for update;
   if not found then raise exception 'Ochiq kassa kuni yo''q' using errcode = 'P0001', hint = 'kassa:no_open_day'; end if;
@@ -1039,7 +1107,8 @@ begin
   -- kutilayotgan topshirish bor: aynan shu so'rov qayta kelgan bo'lsa — o'sha (javob yetib kelmagan); boshqasi — rad
   v_h := app.kassa_handover_pending(v_desk);
   if v_h.id is not null then
-    if v_h."byUid" = v_uid and v_h."toUid" is not distinct from v_to and v_h.counted = v_counted and v_h."pendingSum" = v_pending then
+    if v_h."byUid" = v_uid and v_h."toUid" is not distinct from v_to and v_h.counted = v_counted and v_h."pendingSum" = v_pending
+       and v_h."molChange" = v_mol then
       return jsonb_build_object('ok', true, 'dup', true, 'pending', true, 'handover', to_jsonb(v_h), 'expected', v_h.expected, 'diff', v_h.diff,
                                 'day', app.kassa_day_json(v_d.id));
     end if;
@@ -1069,16 +1138,16 @@ begin
   perform app.kassa_flag(true);
   -- g6v-2: sanashga kirgan orderlar — shu paytdagi eng katta KO-1 / KO-2 raqamlari (kutilayotganda yangi order yo'q, raqam kassa qulfi ostida)
   insert into public.cash_handovers (id, desk, "dayId", day, status, "fromUid", "toUid", "byUid", expected, counted, "pendingSum", diff, denoms, commission, note,
-                                     names, "createdAt", "lastKo1", "lastKo2", "pendingRefs")
+                                     names, "createdAt", "lastKo1", "lastKo2", "pendingRefs", "molChange", blanks)
     values ('ho_' || replace(gen_random_uuid()::text, '-', ''), v_desk, v_d.id, v_d.day, 'pending', v_from, v_to, v_uid, v_exp, v_counted, v_pending,
             v_counted - v_exp - v_pending, v_denoms, v_comm, v_note, app.kassa_names(array[v_from, v_to, v_uid]), clock_timestamp(),
             (select max(c.no) from public.cash_docs c where c."dayId" = v_d.id and c.form = 'KO1' and c.no is not null),
-            (select max(c.no) from public.cash_docs c where c."dayId" = v_d.id and c.form = 'KO2' and c.no is not null), v_refs)
+            (select max(c.no) from public.cash_docs c where c."dayId" = v_d.id and c.form = 'KO2' and c.no is not null), v_refs, v_mol, v_blanks)
     returning * into v_h;
   insert into public.cash_day_events (id, "dayId", desk, day, kind, "byUid", at, reason, data)
     values ('ce_' || replace(gen_random_uuid()::text, '-', ''), v_d.id, v_desk, v_d.day, 'handover', v_uid, clock_timestamp(), nullif(v_note, ''),
             jsonb_build_object('step', 'pending', 'handoverId', v_h.id, 'fromUid', v_from, 'toUid', v_to, 'expected', v_exp, 'counted', v_counted,
-                               'pendingSum', v_pending, 'pendingRefs', v_refs, 'diff', v_h.diff));
+                               'pendingSum', v_pending, 'pendingRefs', v_refs, 'diff', v_h.diff, 'molChange', v_mol));
   perform app.kassa_flag(false);
   return jsonb_build_object('ok', true, 'dup', false, 'pending', true, 'handover', to_jsonb(v_h), 'expected', v_exp, 'diff', v_h.diff,
                             'ignoredRefs', v_ign, 'day', app.kassa_day_json(v_d.id));
@@ -1125,7 +1194,7 @@ begin
   -- state-2: topshirishda e'lon qilingan qurilma navbati yozuvlari (kutilayotganda order yozilmagan — o'zgarmagan) dalolatnomaga o'tadi
   select c.o_diff, c.o_doc_id, c.o_count_id into v_diff, v_doc_id, v_cnt_id
     from app.kassa_count_apply(v_h.desk, v_d.id, v_d.day, 'handover', v_h.counted, v_h."pendingSum", v_h."pendingRefs", null, v_h.denoms, v_h.commission,
-                               v_h.note, v_uid, v_h."fromUid", v_h."byUid", v_h."toUid", v_h.id) c;
+                               v_h.note, v_uid, v_h."fromUid", v_h."byUid", v_h."toUid", v_h.id, v_h."molChange", v_h.blanks) c;
   update public.cash_handovers set status = 'accepted', "acceptedAt" = clock_timestamp(), "countId" = v_cnt_id, "diffDocId" = v_doc_id
    where id = v_h.id returning * into v_h;
   -- g6v-1: qabul sanashi hammasini hisobga oldi (farq hujjati suratida — topshiruvchi davrining «boshqalar» ro'yxati): yangi kassa egasi toza boshlaydi
@@ -2089,6 +2158,154 @@ end $$;
 revoke all on function public.kassa_pay_sheet(text, int) from public, anon;
 grant execute on function public.kassa_pay_sheet(text, int) to authenticated;
 
+-- ---------- Oy oxiri ro'yxati (F2.8; ish reja 4.12 «Davrni yopish») ----------
+--   kassa_month_check(desk, month) — Direktor oy oxiri suratini olib davrni yopishidan oldin: hammasi joyidami. month — 'YYYY-MM'
+--   (berilmasa — o'tgan oy). Bandlar — {code, level, n, …}; level: 'block' — davr yopilmaydi (fin_lock_ready sharti), 'warn' — tuzatish
+--   yoki izoh kerak, 'ok', 'info' — ma'lumot:
+--     days_open    — oy oxirigacha (shu sana ham) yopilmagan kassa kunlari (oy tugamagan bo'lsa bugungi ochiq kun — info);
+--     days_pending — hali bog'lanmagan yozuvlar bilan yopilgan, tekshirilmagan kunlar (qurilma navbati, «Қ» blankalari);
+--     unverified   — oyning yopilgan, tekshirilmagan kunlari;
+--     inv          — oylik komissiya inventarizatsiyasi (INV-16, 2-buyruq): oyning oxirgi yopilgan kassa kuni oylik / yillik sanash bilan
+--                    yopilganmi (oxirgi yopish sanashi bo'yicha); invDays — oyning INV-16 bilan yopilgan kunlari;
+--     shortages    — qarorsiz kamomadlar;  fixes — qaror kutayotgan qayta tasnif so'rovlari (oy hujjatlari bo'yicha);
+--     z            — Z-hisoboti kiritilmagan yoki tizim bilan mos kelmagan yopilgan kunlar;
+--     advances     — oy oxirida muddati o'tgan avans hisobotlari (hisobdorlar; soni va summasi);
+--     limit        — kun oxiridagi qoldig'i kassa limitidan oshgan kunlar;
+--     unmatched    — kuni shu oyga tushgan, o'quvchiga biriktirilmagan tushumlar;
+--     refunds      — Direktor tasdiqlagan, kassadan hali berilmagan qaytarishlar;
+--     payroll      — shu oy vedomosti holati va tasdiqlangan vedomostlar bo'yicha shu oygacha to'lanmagan ish haqi (soni va summasi);
+--     snapshot     — oy oxiri surati (fin_snapshots, "asOfDay" = oy oxiri);  lock — davr qulfi oy oxirigacha.
+--   Sinov kassasida pul jadvallari bandlari (z, unmatched, payroll, snapshot, lock) — yo'q, block ham yo'q (davr qulfi sinov kassasiga
+--   qaramaydi). ready / readyWhy — davrni oy oxirigacha yopish mumkinmi (app.fin_lock_ready: barcha haqiqiy kassalar); canLock — oy
+--   tugagan, davr hali yopilmagan, ready va so'rovchi Direktor. Huquq — Direktor va 2-ro'yxat («Davr surati va qulfi» oynasi bilan bir xil);
+--   ismlar yo'q (soni, summa, sana).
+create or replace function public.kassa_month_check(p_desk text default 'main', p_month text default null) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare
+  v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today(); v_m text; v_from date; v_to date;
+  v_test boolean; v_lock date; v_limit numeric; v_ended boolean; v_items jsonb := '[]'::jsonb; v_days jsonb; v_n int; v_s numeric;
+  v_did text; v_last date; v_kind text; v_cnt text; v_snap jsonb; v_run text; v_ready boolean := false; v_why text; v_asof date;
+begin
+  if not (app.is_admin() or app.fin_list2()) then
+    raise exception 'Ruxsat yo''q: oy oxiri ro''yxati — Direktor va 2-ro''yxat (Moliya menejeri, buxgalter)' using errcode = '42501';
+  end if;
+  select k."isTest" into v_test from public.cash_desks k where k.id = v_desk;
+  if not found then raise exception 'Kassa topilmadi' using errcode = '22023', hint = 'kassa:not_found'; end if;
+  v_m := coalesce(nullif(btrim(coalesce(p_month, '')), ''), to_char(date_trunc('month', v_today) - interval '1 day', 'YYYY-MM'));
+  if v_m !~ '^\d{4}-(0[1-9]|1[0-2])$' then raise exception 'Oy noto''g''ri (YYYY-MM)' using errcode = '22023', hint = 'kassa:bad_input'; end if;
+  v_from := (v_m || '-01')::date;
+  v_to := (v_from + interval '1 month' - interval '1 day')::date;
+  if v_from > v_today or v_from < date '2000-01-01' then
+    raise exception 'Oy noto''g''ri: kelajakdagi yoki juda eski oy' using errcode = '22023', hint = 'kassa:bad_input';
+  end if;
+  v_ended := v_to < v_today;
+  v_asof := least(v_to, v_today);
+  select o."lockedThrough", o."cashLimit" into v_lock, v_limit from public.fin_org o where o.id = 'main';
+
+  -- yopilmagan kunlar (oy oxirigacha; oldingi oylarniki ham — davr qulfi ularga ham qaraydi)
+  select coalesce(jsonb_agg(d.day order by d.day), '[]'::jsonb), count(*) filter (where d.day < v_today or v_ended)
+    into v_days, v_n from public.cash_days d where d.desk = v_desk and d.status = 'open' and d.day <= v_to;
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'days_open', 'n', jsonb_array_length(v_days), 'days', v_days,
+    'level', case when jsonb_array_length(v_days) = 0 then 'ok' when v_n = 0 or v_test then 'info' else 'block' end));
+  -- hali bog'lanmagan yozuvlar bilan yopilgan kunlar (app.fin_lock_ready bilan bir xil shart)
+  select coalesce(jsonb_agg(x.day order by x.day), '[]'::jsonb) into v_days
+    from (select d.day, app.kassa_day_pending(d.id) as p from public.cash_days d
+           where d.desk = v_desk and d.status = 'closed' and d.day <= v_to
+             and (jsonb_array_length(d."pendingRefs") > 0 or d."paperCount" > 0
+                  or exists (select 1 from public.cash_counts n where n."dayId" = d.id and n.kind = 'handover' and jsonb_array_length(n."pendingRefs") > 0))) x
+   where (x.p ->> 'n')::int > 0 or (x.p ->> 'paperCount')::int > 0;
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'days_pending', 'n', jsonb_array_length(v_days), 'days', v_days,
+    'level', case when jsonb_array_length(v_days) = 0 then 'ok' when v_test then 'warn' else 'block' end));
+  -- tekshirilmagan kunlar (shu oy)
+  select coalesce(jsonb_agg(d.day order by d.day), '[]'::jsonb) into v_days
+    from public.cash_days d where d.desk = v_desk and d.status = 'closed' and d.day between v_from and v_to;
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'unverified', 'n', jsonb_array_length(v_days), 'days', v_days,
+    'level', case when jsonb_array_length(v_days) = 0 then 'ok' else 'warn' end));
+  -- oylik komissiya inventarizatsiyasi (INV-16): oyning oxirgi yopilgan kuni — oxirgi yopish sanashi turi
+  select d.id, d.day into v_did, v_last from public.cash_days d
+   where d.desk = v_desk and d.status <> 'open' and d.day between v_from and v_to order by d.day desc limit 1;
+  if v_did is not null then
+    select n.kind, n.id into v_kind, v_cnt from public.cash_counts n
+     where n."dayId" = v_did and n.kind in ('close', 'monthly', 'yearly') order by n.at desc, n.id desc limit 1;
+  end if;
+  select coalesce(jsonb_agg(x.day order by x.day), '[]'::jsonb) into v_days
+    from (select d.day, (select n.kind from public.cash_counts n where n."dayId" = d.id and n.kind in ('close', 'monthly', 'yearly')
+                          order by n.at desc, n.id desc limit 1) as k
+            from public.cash_days d where d.desk = v_desk and d.status <> 'open' and d.day between v_from and v_to) x
+   where x.k in ('monthly', 'yearly');
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'inv', 'lastDay', v_last, 'kind', v_kind,
+    'countId', case when v_kind in ('monthly', 'yearly') then v_cnt end, 'invDays', v_days,
+    'n', case when v_last is null or v_kind in ('monthly', 'yearly') then 0 else 1 end,
+    'level', case when v_last is null then 'info' when v_kind in ('monthly', 'yearly') then 'ok' when v_ended then 'warn' else 'info' end));
+  -- qarorsiz kamomadlar
+  select count(*), coalesce(sum(c.amount), 0) into v_n, v_s from public.cash_docs c
+   where c.desk = v_desk and c.op = 'out_shortage' and c.status = 'posted' and c.decision is null and c."businessDay" between v_from and v_to;
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'shortages', 'n', v_n, 'sum', v_s, 'level', case when v_n = 0 then 'ok' else 'warn' end));
+  -- qaror kutayotgan qayta tasnif so'rovlari (shu oy hujjatlari)
+  select count(*) into v_n from public.cash_doc_fixes f join public.cash_docs c on c.id = f."docId"
+   where f.desk = v_desk and f.status = 'pending' and c."businessDay" between v_from and v_to;
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'fixes', 'n', v_n, 'level', case when v_n = 0 then 'ok' else 'warn' end));
+  if not v_test then
+    -- Z-hisobot: kiritilmagan yoki mos kelmagan yopilgan kunlar
+    select coalesce(jsonb_agg(d.day order by d.day), '[]'::jsonb) into v_days
+      from public.cash_days d where d.desk = v_desk and d.status <> 'open' and d.day between v_from and v_to
+       and coalesce((app.kassa_z_state(d.id) ->> 'ok')::boolean, true) = false;
+    v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'z', 'n', jsonb_array_length(v_days), 'days', v_days,
+      'level', case when jsonb_array_length(v_days) = 0 then 'ok' else 'warn' end));
+  end if;
+  -- oy oxirida muddati o'tgan avans hisobotlari (soni va summasi — ismsiz)
+  v_items := v_items || jsonb_build_array((select jsonb_build_object('code', 'advances', 'n', (x ->> 'n')::int, 'sum', (x ->> 'sum')::numeric, 'asOf', v_asof,
+                                                                     'level', case when (x ->> 'n')::int = 0 then 'ok' else 'warn' end)
+                                             from (select app.kassa_acc_overdue(v_desk, v_asof) as x) q));
+  -- kassa limitidan oshgan kun oxiri qoldiqlari
+  select coalesce(jsonb_agg(d.day order by d.day), '[]'::jsonb) into v_days
+    from public.cash_days d where d.desk = v_desk and d.status <> 'open' and d.day between v_from and v_to
+     and coalesce(v_limit, 0) > 0 and coalesce(d.closing, 0) > v_limit;
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'limit', 'n', jsonb_array_length(v_days), 'days', v_days, 'cashLimit', v_limit,
+    'level', case when jsonb_array_length(v_days) = 0 then 'ok' else 'info' end));
+  if not v_test then
+    -- biriktirilmagan tushumlar (kuni shu oyda)
+    select count(*), coalesce(sum(p.amount), 0) into v_n, v_s from public.payments p
+     where coalesce(p.status, '') = 'unmatched' and coalesce(p.amount, 0) > 0 and app.pay_day(p."createdAt", p.raw) between v_from and v_to;
+    v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'unmatched', 'n', v_n, 'sum', v_s, 'level', case when v_n = 0 then 'ok' else 'warn' end));
+  end if;
+  -- tasdiqlangan, hali berilmagan qaytarishlar
+  select count(*), coalesce(sum(c.amount), 0) into v_n, v_s from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved';
+  v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'refunds', 'n', v_n, 'sum', v_s, 'level', case when v_n = 0 then 'ok' else 'info' end));
+  if not v_test then
+    -- vedomost va to'lanmagan ish haqi (tasdiqlangan vedomostlar, shu oygacha; davr surati bilan bir xil qoida)
+    select r.status into v_run from public.payroll_runs r where r.id = v_m;
+    select count(*), coalesce(sum(x.payable - x.paid), 0) into v_n, v_s
+      from (select coalesce(l.payable, 0) as payable,
+                   coalesce((select sum(coalesce(sp.paid, 0)) from public.salary_payments sp where sp."teacherId" = l."personId" and sp.month = l."runId"), 0) as paid
+              from public.payroll_lines l join public.payroll_runs r on r.id = l."runId"
+             where r.status = 'approved' and l."runId" <= v_m) x
+     where x.payable - x.paid <> 0;
+    v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'payroll', 'run', coalesce(v_run, 'none'), 'n', v_n, 'sum', v_s,
+      'level', case when v_run = 'approved' and v_n = 0 then 'ok' else 'info' end));
+    -- oy oxiri surati va davr qulfi
+    select jsonb_build_object('id', s.id, 'version', s.version, 'late', s.late, 'takenAt', s."createdAt") into v_snap
+      from public.fin_snapshots s where s."asOfDay" = v_to order by s.version desc limit 1;
+    v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'snapshot', 'n', case when v_snap is null then 0 else 1 end, 'snapshot', v_snap,
+      'level', case when v_snap is not null then 'ok' else 'info' end));
+    v_items := v_items || jsonb_build_array(jsonb_build_object('code', 'lock', 'lockedThrough', v_lock, 'n', case when v_lock >= v_to then 1 else 0 end,
+      'level', case when v_lock >= v_to then 'ok' else 'info' end));
+    if v_lock >= v_to then v_ready := true;
+    elsif v_ended then
+      begin perform app.fin_lock_ready(v_to); v_ready := true;
+      exception when others then v_ready := false; v_why := sqlerrm; end;
+    end if;
+  end if;
+  return jsonb_build_object('ok', true, 'desk', v_desk, 'isTest', v_test, 'month', v_m, 'from', v_from, 'to', v_to, 'today', v_today, 'ended', v_ended,
+    'lockedThrough', v_lock, 'locked', coalesce(v_lock >= v_to, false), 'snapshot', v_snap, 'items', v_items,
+    'blockers', (select count(*) from jsonb_array_elements(v_items) i where i ->> 'level' = 'block'),
+    'warnings', (select count(*) from jsonb_array_elements(v_items) i where i ->> 'level' = 'warn'),
+    'ready', v_ready, 'readyWhy', v_why,
+    'canLock', app.is_admin() and v_ended and not v_test and not coalesce(v_lock >= v_to, false) and v_ready);
+end $$;
+revoke all on function public.kassa_month_check(text, text) from public, anon;
+grant execute on function public.kassa_month_check(text, text) to authenticated;
+
 -- Hisobdorlardagi pul (4230) p_asof sanasi holatiga: berilgan − naqd qaytarilgan − avans hisobotlari; "since" — hali yopilmagan
 --   eng eski berilgan sana (FIFO); "workDays" — o'shandan p_asof gacha o'tgan ish kunlari (du–ju; g9: maktabning «Bayram / ta'til
 --   kunlari» ham sanalmaydi — app.school_days, nurse-sick.sql); hisobot muddati — 3 ish kuni (§4.9).
@@ -2321,6 +2538,16 @@ begin
     -- F2.13: Direktor qarorini kutayotgan qayta tasnif so'rovlari va oxirgi 30 kunda tasdiqlanganlari (kassa-fix.sql)
     'fixPending', (select count(*) from public.cash_doc_fixes f where f.desk = v_desk and f.status = 'pending'),
     'fixes30', (select count(*) from public.cash_doc_fixes f where f.desk = v_desk and f.status = 'approved' and f."actDay" >= v_today - 30),
+    -- F2.8 (INV-16): oylik komissiya inventarizatsiyasi — oxirgi 3 ta tugagan oyda oyning oxirgi yopilgan kassa kuni oylik / yillik sanash
+    --   bilan yopilmagan (oxirgi yopish sanashi bo'yicha) oylar. Sinov kassasida — yo'q
+    'invMissing', case when v_test then '[]'::jsonb else
+                   coalesce((select jsonb_agg(jsonb_build_object('month', x.m, 'lastDay', x.day) order by x.m)
+                               from (select distinct on (to_char(d.day, 'YYYY-MM')) to_char(d.day, 'YYYY-MM') as m, d.day, d.id
+                                       from public.cash_days d
+                                      where d.desk = v_desk and d.status <> 'open' and d.day < v_m0 and d.day >= (v_m0 - interval '3 months')::date
+                                      order by to_char(d.day, 'YYYY-MM'), d.day desc) x
+                              where coalesce((select n.kind from public.cash_counts n where n."dayId" = x.id and n.kind in ('close', 'monthly', 'yearly')
+                                               order by n.at desc, n.id desc limit 1), 'close') not in ('monthly', 'yearly')), '[]'::jsonb) end,
     'staleRefunds', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_refund' and c.status = 'approved'
                        and c."dirApprovedAt" < app.fin_now() - interval '1 day'),
     'salaryGateOff30', (select count(*) from public.cash_docs c where c.desk = v_desk and c.op = 'out_salary' and c.status = 'posted'
