@@ -127,7 +127,10 @@ begin
            "priceKey"        = coalesce(v_meta->>'priceKey', "priceKey"),
            "billedFrom"      = coalesce(v_meta->>'billedFrom', "billedFrom"),
            "billedTo"        = coalesce(v_meta->>'billedTo', "billedTo"),
-           "referralUsedIds" = coalesce(v_meta->'referralUsedIds', "referralUsedIds")
+           "referralUsedIds" = coalesce(v_meta->'referralUsedIds', "referralUsedIds"),
+           -- Faktura tarkibi (F2.7, inv-parts.sql): yalpi va chegirma turlari; mos kelmasa trigger trg_invoice_zparts qayta hisoblaydi.
+           "grossAmount"     = coalesce((v_meta->>'grossAmount')::numeric, "grossAmount"),
+           "discountParts"   = case when jsonb_typeof(v_meta->'discountParts') = 'object' then v_meta->'discountParts' else "discountParts" end
      where id = p_id;
     -- Referral jurnali — faktura bilan BIRGA (faktura yangilanmasa referral «sarflanmaydi»).
     if jsonb_typeof(v_meta->'referralUsedIds') = 'array' then

@@ -90,12 +90,12 @@ end $$;
 --    shu nomlardan o'qiydi (admin.html: collection() — «invoices» → «invoices_acc» va h.k.).
 
 -- 2a) Fakturalar: kasallik sanalari (sickNoteRefs — {ma'lumotnoma: [kunlar]}) — yo'q; summa, chegirma va sababi, kasal kunlar
---     soni va summasi — bor (hisob uchun kerak).
+--     soni va summasi, faktura tarkibi (yalpi va chegirma turlari — F2.7, inv-parts.sql) — bor (hisob uchun kerak).
 create view public.invoices_acc with (security_barrier = true) as
   select i.id, i."studentId", i."studentName", i."classKey", i.month, i.amount, i."paidAmount", i.provider, i.status,
          i."providerTrans", i."paidAt", i."reversedAt", i."createdAt", i."baseAmount", i.discount, i."discountInfo", i."isGrant",
          i."pctApplied", i."sickDaysApplied", i."sickAmount", i."priceKey", i."referralUsedIds", i."billedFrom", i."billedTo",
-         i."bonusRef", i."approvalRefs"
+         i."bonusRef", i."approvalRefs", i."grossAmount", i."discountParts"
     from public.invoices i, (select app.is_accountant() as ok) acc
    where acc.ok;
 

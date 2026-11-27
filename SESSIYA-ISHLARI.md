@@ -3673,6 +3673,49 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   Yil oxirida «Kassa» → «Kitob»: oyna «to'liq» deganda muqova va guvohnomani chop etib, KO-4 varaqlarining 1-nusxalarini tiking,
   ip o'tkazing, muhrlang; guvohnomani rahbar va bosh buxgalter imzolaydi. Kassa moduli hali `--dev` — jonli zanjirga o'tkazish bilan chiqadi.
 
+## 98) F2.7 — hisob-faktura tarkibi: yalpi summa va chegirma turlari (reliz 22) — 2026-11-27
+
+- **Egasi (2026-11-27):** «Qolgan bandlarni boshla» — navbatdagi band F2.7 (FD-32: yalpi 9030, chegirma 9050 turi bo'yicha, prorata —
+  kamroq daromad, bemor kuni — 9030 storno; qabul mezoni — 100 % fakturada mos, ±1 so'm).
+- **Model:** `invoices."grossAmount"` — yalpi (asosiy narx; oy o'rtasida kelgan-ketganda ish kunlari ulushi bilan — 100 % grantda ham) va
+  `"discountParts"` — {tur: so'm}: `grant`, `monitoring100`, `monitoring20`, `teacher_child`, `siblings` (toifa — bittasi, foizga mos),
+  `referral`, `sick` (fakturadan haqiqatan ayirilgani — eski qoidada fakturaga sig'magan qism tarkibga kirmaydi), `other` (faqat server
+  eski fakturani tushuntira olmagan farq). Summa (amount) o'zgarmaydi: amount = yalpi − Σ qismlar.
+- **Qaror — asosiy zanjirda:** sahifa tarkibni har bazaga yozadi (ustun bo'lmasa PGRST204 — faktura yaratilmay qolardi), shuning uchun
+  ustunlar `discounts.sql` da, trigger va to'ldirish yangi `inv-parts.sql` da (asosiy zanjir, `sheets-sync.sql` dan keyin), `reprice_invoice`
+  meta dan tarkibni yozadi (`invoice-guards.sql`), qo'riqchi (a)-bandi tarkibni summa / chegirma maydonlari kabi himoya qiladi
+  (`discount-approval.sql`). Moliya modulida (`--dev`): davr qulfi tarkib ustunlarini ham qamraydi (`fin_lock_invoices`), buxgalter
+  ko'rinishi `invoices_acc` da tarkib; reliz 22, barmoq izlari qayta yozildi (383).
+- **Trigger `trg_invoice_zparts`** (BEFORE, nomi alfavit bo'yicha oxirgi — bonus qo'riqchisi `bonusRef` ni normallashtirgandan keyin):
+  sahifa yuborgan tarkib qat'iy tekshiriladi (ma'lum turlar, musbat qiymatlar, toifa turi `pctApplied` ga mos — `app.inv_parts_kind`,
+  kasal kun ≤ `sickAmount`, yig'indi aniq, `other` — yo'q) va mos bo'lsa saqlanadi; mos kelmasa yoki yuborilmasa (eski sahifa, to'lov
+  serveri, qo'lda yozuv) — server saqlangan maydonlardan chiqaradi (`app.inv_parts_infer`: narx → foiz → izohdagi «a/b ish kuni
+  (prorata)» → kasal kun → «Referral −X»; JS `Math.round` va IEEE double bilan aynan bir xil — `app.inv_jsround`). Faktura yozuvi tarkib
+  sababli rad etilmaydi (pul amali to'xtamasin; WARNING). Summa / foiz / izoh o'zgarsa — saqlangan tarkib hamon mos bo'lsa tegilmaydi
+  (aniq tarkib server taxminiga almashtirilmaydi), mos bo'lmasa qayta chiqariladi; to'lov qo'llanishi — tegmaydi; ikkala ustunni NULL
+  qilish — «server qayta hisoblasin».
+- **Nozik holat (sinovda topildi):** eski qoidadagi «Monitoring 100» (bonus ishorasisiz) faktura holat bo'yicha bekor qilinganda izoh
+  «[holat] …» bo'lib qoladi — 100 % turi izohdan aniqlanmay, har deploydagi to'ldirish uni «grant» ga o'zgartirib yuborardi. Tekshiruv
+  «[holat]» izohli fakturada saqlangan grant / monitoring100 ni qabul qiladi.
+- **Sahifa:** `computeTuition` yalpi va tarkibni qaytaradi (har qism qoldiq sifatida — yig'indi aniq), qisman oyda 100 % grantga ham ish
+  kunlari ulushi izohga yoziladi (baza izohdan qayta chiqara olsin); tavsiya bonusi `applyReferral(Units)` da tarkibga qo'shiladi;
+  generatsiya va `reprice_invoice` meta tarkibni yuboradi; «↻ Qayta hisoblash» tarkib farqini ham o'zgarish deb biladi (`invPartsSame`;
+  server eski fakturadan taxminan chiqargan tarkib shu tugma bilan aniq bo'ladi); «To'lovlar» qatorida chegirma belgisi izohida tarkib
+  («Yalpi … · xodim farzandi −…»).
+- **Eski fakturalar:** `app.inv_parts_backfill` — har deployda (zanjirda) tarkibi yo'q yoki mos kelmaydigan qatorlar; tushuntirib
+  bo'lmagan farq: summa kichik — `other`, katta — kasal kun, tavsiya, toifa qismi tartibida kamaytiriladi; 2026-11 dan amaldagi shunday
+  fakturalar — deploy chiqishida «OGOHLANTIRISH» (ID lar, ismsiz); `full-deploy.sh` da yig'ma qator (kutilgan 0).
+- **Sinovlar:** yangi `test-inv-parts.sql` — korpus (sahifa hisoblagan 124 faktura `assets/js/inv-parts.test.mjs` bilan umumiy: baza
+  ulardan aynan shu tarkibni chiqaradi), trigger, `reprice_invoice`, huquq, davr qulfi, buxgalter ko'rinishi, to'ldirish (dev 32, jonli 30);
+  mutatsiya 30/30 (birinchi o'tishda 6 tasi tirik qoldi — JS yaxlitlashidagi «yarim» holati, 0 qism, manfiy yalpi, kasrli summa va
+  kontrakt, «[holat]» — tekshiruvlar qo'shildi); node `inv-parts.test.mjs` (10; `davomat-bemor` sinovi `invPartKind` ni ham o'qiydi);
+  brauzer — yangi `k24` (13); `payments/_schema-columns.json` (invoices) yangilandi.
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 69/69, jonli zanjir va qayta zanjir, tugun va server sinovlari) — hammasi yashil (`test-inv-parts` dev 32 / qayta zanjirdan keyin 32 / jonli 30); ma'lumotli mashq — sinov stendi urug'i (116 faktura): zanjirni qayta ishga tushirish hech narsani o'zgartirmadi, tarkibsiz qilingan ma'lumot to'liq to'ldirildi (oktyabrning ikki qisman fakturasi — `other`, ogohlantirish chegarasidan oldingi oy); brauzer to'plami — 31 o'tish, 762 tekshiruv (kassa 620; yangi `k24` — 13) — hammasi o'tdi.
+- **Egasi va buxgalter uchun:** har fakturada endi yalpi summa va chegirmalar turlari bo'yicha saqlanadi (summa o'zgarmaydi) — 4-bosqich
+  bosh kitobi (9030 / 9050) va chegirma tahlili shundan. Deploydan keyin «faktura tarkibi» qatorida «mos emas: 0» bo'lishi kerak; «izohsiz
+  farq» bo'lsa — to'lanmagan fakturalar uchun shu oy «↻ Qayta hisoblash» aniq tarkibni yozadi. Ustunlar va trigger asosiy zanjirda —
+  keyingi deploy bilan chiqadi (deploy egasi qarori bilan).
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

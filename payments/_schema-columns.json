@@ -40,6 +40,8 @@
   "createdAt",
   "discount",
   "discountInfo",
+  "discountParts",
+  "grossAmount",
   "id",
   "isGrant",
   "month",

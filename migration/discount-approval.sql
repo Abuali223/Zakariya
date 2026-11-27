@@ -503,7 +503,8 @@ begin
        or new."bonusRef" is distinct from old."bonusRef" or new."approvalRefs" is distinct from old."approvalRefs"
        or new."referralUsedIds" is distinct from old."referralUsedIds" or new.month is distinct from old.month
        or new."studentId" is distinct from old."studentId" or new."priceKey" is distinct from old."priceKey"
-       or new."billedFrom" is distinct from old."billedFrom" or new."billedTo" is distinct from old."billedTo" then
+       or new."billedFrom" is distinct from old."billedFrom" or new."billedTo" is distinct from old."billedTo"
+       or new."grossAmount" is distinct from old."grossAmount" or new."discountParts" is distinct from old."discountParts" then
       raise exception 'Hisob-faktura summasi / chegirmasini faqat Direktor yoki «↻ Qayta hisoblash» o''zgartiradi (to''lov maydonlari — mumkin)' using errcode = '42501';
     end if;
   end if;

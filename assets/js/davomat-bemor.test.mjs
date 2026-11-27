@@ -32,7 +32,7 @@ const BASE = ['SA_WORKDAYS', 'SA_RULES', 'hmToMin', 'personRules', '_saDate', 's
 // ---- computeTuition (fakturadagi kasal kun) ----
 const T = (() => {
   const ctx = vm.createContext({ tkDay: d => String(d || '').slice(0, 10) });
-  const names = [...BASE, 'trackOf', 'priceKeyOf', 'priceOf', 'pmNum', 'computeTuition', 'sickExemptCat', 'SICK_EXEMPT_LBL'];
+  const names = [...BASE, 'trackOf', 'priceKeyOf', 'priceOf', 'pmNum', 'invPartKind', 'computeTuition', 'sickExemptCat', 'SICK_EXEMPT_LBL'];   // invPartKind — F2.7 tarkib
   vm.runInContext(names.map(decl).join('\n') + '\n;this.__t = { computeTuition, sickExemptCat: typeof sickExemptCat === "function" ? sickExemptCat : null };', ctx);
   return ctx.__t;
 })();

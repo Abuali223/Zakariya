@@ -237,10 +237,10 @@ declare v_d date; v_lock date; v_m text;
 begin
   if tg_op = 'UPDATE'
      and (new.amount, new."baseAmount", new.discount, new."isGrant", new."pctApplied", new."sickAmount", new."sickDaysApplied", new.month,
-          new."studentId", new."billedFrom", new."billedTo", new."priceKey")
+          new."studentId", new."billedFrom", new."billedTo", new."priceKey", new."grossAmount", new."discountParts")
          is not distinct from
          (old.amount, old."baseAmount", old.discount, old."isGrant", old."pctApplied", old."sickAmount", old."sickDaysApplied", old.month,
-          old."studentId", old."billedFrom", old."billedTo", old."priceKey")
+          old."studentId", old."billedFrom", old."billedTo", old."priceKey", old."grossAmount", old."discountParts")
      and (coalesce(new.status, '') in ('canceled', 'reversed')) = (coalesce(old.status, '') in ('canceled', 'reversed')) then
     return new;   -- to'lov qo'llanishi va boshqa belgi — hisoblanishni o'zgartirmaydi
   end if;

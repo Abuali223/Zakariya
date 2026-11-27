@@ -83,8 +83,11 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --     21 — 2-bosqich F2.12: patta tekshiruv kaliti — cash_doc_verify (KO-1 raqam olganda, trigger trg_kassa_vtok / app.kassa_vtok; eski
 --          kirim orderlariga zanjirda), app.kassa_doc_json → vtok, public.verify_patta (mehmon ham; ismsiz: holat, raqam, sana, summa,
 --          tashkilot); public.kassa_book_cover — kassa kitobi yil muqovasi va varaqlar guvohnomasi (KO-4 varaqlari, uzilish, ochiq kun).
+--     22 — 2-bosqich F2.7: faktura tarkibi — invoices."grossAmount" / "discountParts" (asosiy zanjir: discounts.sql, inv-parts.sql —
+--          trigger trg_invoice_zparts, eski fakturalarni to'ldirish; reprice_invoice meta); shu modulda — davr qulfi tarkib ustunlarini
+--          ham qamraydi (app.fin_lock_invoices), buxgalter ko'rinishi invoices_acc da tarkib ustunlari.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 21 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 22 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

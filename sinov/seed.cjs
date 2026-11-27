@@ -226,12 +226,13 @@ for (const s of ACTIVE.filter(s => s.cls.grade >= 5)) {
 function invoiceRow(s, month) {
   return { id: `${s.sid}__${month}`, studentId: s.sid, studentName: s.name, classKey: s.classKey, month, amount: s.price, paidAmount: 0, status: 'pending', provider: '',
     baseAmount: s.price, discount: 0, discountInfo: '', isGrant: false, pctApplied: 0, sickDaysApplied: 0, sickAmount: 0, sickNoteRefs: {}, bonusRef: '',
+    grossAmount: s.price, discountParts: {},   // faktura tarkibi (F2.7): chegirmasiz — yalpi = summa
     approvalRefs: [], referralUsedIds: [], priceKey: s.priceKey, billedFrom: '', billedTo: '', createdAt: ts(dayOf(month, 1), 10, 0) };
 }
 for (const s of ACTIVE) { ins('invoices', invoiceRow(s, PREV)); ins('invoices', invoiceRow(s, CUR)); }
 // Muzlatilgan va chiqib ketgan o'quvchining o'tgan oy fakturasi — o'qigan kunlari uchun (taxminan yarim oy), to'langan.
 for (const n of [58, 59]) { const s = byN(n), part = Math.round(s.price / 2 / 1000) * 1000;
-  ins('invoices', Object.assign(invoiceRow(s, PREV), { amount: part, discountInfo: `Oyning bir qismi (${dayOf(PREV, 1)} — ${s.stopFrom})`, billedFrom: dayOf(PREV, 1), billedTo: s.stopFrom })); s.partPrev = part; }
+  ins('invoices', Object.assign(invoiceRow(s, PREV), { amount: part, grossAmount: part, discountInfo: `Oyning bir qismi (${dayOf(PREV, 1)} — ${s.stopFrom})`, billedFrom: dayOf(PREV, 1), billedTo: s.stopFrom })); s.partPrev = part; }
 
 // ---------------------------------------------------------------- to'lovlar — ilovaning apply_payment funksiyasi orqali
 sql(`

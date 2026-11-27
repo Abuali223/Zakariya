@@ -27,7 +27,7 @@ set default_transaction_read_only = on;
 \pset null ''
 \set bad 0
 \set err 0
-\set want_ver 21
+\set want_ver 22
 \set ver 0
 -- har band bo'yicha muammo qatorlari soni (c1 … c24) — sinov (test-kassa-checks.sql) shularni o'qiydi
 \set c1 0 \set c2 0 \set c3 0 \set c4 0 \set c5 0 \set c6 0 \set c7 0 \set c8 0 \set c9 0 \set c10 0 \set c11 0
@@ -380,7 +380,7 @@ select :bad + :ROW_COUNT as bad, :err + (:'ERROR' = 'true')::int as err, :ROW_CO
 
 -- <barmoq-izlari> Shu reliz toza zanjiridan olingan himoya mantig'i izlari (23-band). Qo'lda tahrirlanmaydi — qayta yozish:
 --   bash migration/kassa-fingerprints.sh   (lokal PostgreSQL'da vaqtinchalik bazaga --dev zanjirni quradi va shu blokni almashtiradi)
-\set fp_rel 21
+\set fp_rel 22
 \set fp_pg 16
 select $fp$
 constraint|cash_counts.cash_counts_counted_check|4771070363f33300
@@ -525,7 +525,7 @@ func|app.fin_list2()|fd2ba396c2a2e1a2
 func|app.fin_lock_check(p_day date, p_what text)|af22cffb251779f2
 func|app.fin_lock_credit()|eaebccae37cd41b9
 func|app.fin_lock_hit(p_day date)|d7476176cd02b586
-func|app.fin_lock_invoices()|7c91c008f75c2edb
+func|app.fin_lock_invoices()|b67b32e96ab052c7
 func|app.fin_lock_payments()|3cda528e964aa7a3
 func|app.fin_lock_payroll()|144e0cda2abfd125
 func|app.fin_lock_ready(p_through date)|d4ec95210b437e52
@@ -627,7 +627,7 @@ func|app.kassa_tuition_info(p_pay_id text)|bc91bdae2f75c015
 func|app.kassa_tuition_post(p_pay_id text, p_amount numeric, p_payer_name text, p_captured timestamp with time zone, p_extra jsonb, p_before jsonb, p_apply_dup boolean)|13bcb0807603b2a5
 func|app.kassa_user_cards(p_uid text)|2fecd501adbfa623
 func|app.kassa_user_label(p_name text, p_ref_type text, p_ref_id text, p_uid text)|1619d01296fbe3b6
-func|app.kassa_version()|92f7fe998e5b5b4b
+func|app.kassa_version()|ebb71d7667b1a9de
 func|app.kassa_vtok()|83ce0606e28b4575
 func|app.kassa_week_kpi(p_desk text, p_from date, p_to date)|23dc58b8b45d39cc
 func|app.kassa_z_day(p_desk text, p_day date, p_late boolean, p_captured timestamp with time zone)|e388c6c761abaa22

@@ -80,6 +80,12 @@ alter table invoices add column if not exists "referralUsedIds" jsonb;
 --    kunlar uchun to'lanmagan pul qaytarilmasin). BU USTUNLAR bo'lmasa -> invoice yozishda PGRST204.
 alter table invoices add column if not exists "billedFrom"      text;
 alter table invoices add column if not exists "billedTo"        text;
+--    grossAmount / discountParts (moliya F2.7, FD-32): faktura TARKIBI — yalpi summa (asosiy narx; oy o'rtasida kelgan / ketganda —
+--    ish kunlari ulushi: prorata kamroq daromad, chegirma emas) va chegirmalar turlari bo'yicha ({tur: so'm}); amount = grossAmount −
+--    Σ discountParts. Sahifa yozadi; yuborilmasa yoki mos kelmasa — server o'zi chiqaradi (inv-parts.sql, trg_invoice_zparts).
+--    BU USTUNLAR bo'lmasa -> invoice yozishda PGRST204.
+alter table invoices add column if not exists "grossAmount"     numeric;
+alter table invoices add column if not exists "discountParts"   jsonb;
 
 -- ---------------------------------------------------------------------
 -- 4) price_table: sinf/yo'nalish/til bo'yicha oylik narx (numeric)

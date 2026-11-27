@@ -12015,6 +12015,24 @@ function statusSkipCertain(code, month, curMonth){
   if((code==='trial' || code==='future') && String(month)>=String(curMonth)) return true;   // joriy/kelgusi oy — joriy holat ishonchli
   return false;                                                             // nodate / empty / o'tgan oy uchun trial|future
 }
+// F2.7 (FD-32): hisob-faktura TARKIBI — yalpi summa ("grossAmount": asosiy narx; oy o'rtasida kelgan / ketganda ish kunlari ulushi —
+//   prorata kamroq daromad, chegirma emas) va chegirmalar turlari bo'yicha ("discountParts": {tur: so'm}); amount = yalpi − Σ qismlar.
+//   Toifa turi foizdan — baza (migration/inv-parts.sql, app.inv_parts_kind) bilan AYNAN bir xil qoida: ≥100% — «Monitoring 100…» matni
+//   yoki bonus ishorasi bo'lsa monitoring100, aks holda grant; ≥50% — xodim farzandi; ≥20% — monitoring 90+; >0 — aka-uka.
+const INV_PART_LBL={ grant:'grant', monitoring100:'monitoring 100', monitoring20:'monitoring 20%', teacher_child:'xodim farzandi', siblings:'aka-uka', referral:'tavsiya', sick:'kasal kun', other:'izohsiz farq' };
+function invPartKind(pct, bonusRef, info){ const p=Number(pct)||0;
+  if(p>=1) return (String(bonusRef||'')!=='' || /^monitoring 100/i.test(String(info||'')))?'monitoring100':'grant';
+  return p>=0.5?'teacher_child':p>=0.2?'monitoring20':p>0?'siblings':''; }
+function invPartsNorm(p){ const o={}; if(p && typeof p==='object' && !Array.isArray(p)) Object.keys(p).forEach(k=>{ const v=Number(p[k]); if(isFinite(v) && v!==0) o[k]=v; }); return o; }
+// Fakturadagi saqlangan tarkib hisoblangani bilan bir xilmi — farq bo'lsa «↻ Qayta hisoblash» yangisini yozadi.
+function invPartsSame(iv, t){ if(!t || t.gross==null) return true;
+  if(!iv || iv.grossAmount==null || iv.grossAmount==='' || Math.abs(Number(iv.grossAmount)-Number(t.gross))>=0.5) return false;
+  const a=invPartsNorm(iv.discountParts), b=invPartsNorm(t.parts), ka=Object.keys(a).sort(), kb=Object.keys(b).sort();
+  return ka.length===kb.length && ka.every((k,i)=>k===kb[i] && Math.abs(a[k]-b[k])<0.5); }
+// Faktura qatori izohi: «Yalpi 3 000 000 so‘m · aka-uka −300 000 so‘m · kasal kun −80 000 so‘m».
+function invPartsText(r){ if(!r || r.grossAmount==null || r.grossAmount==='' || !isFinite(Number(r.grossAmount))) return '';
+  const p=invPartsNorm(r.discountParts);
+  return `Yalpi ${fmtSom(Number(r.grossAmount))}`+Object.keys(p).map(k=>` · ${INV_PART_LBL[k]||k} −${fmtSom(p[k])}`).join(''); }
 function computeTuition(s, priv, ctx){
   const pv=priv||{}; const cat=pv.specialCategory||''; const sid=s.studentId||s._id;
   const round=n=>Math.round(n); const priceKey=priceKeyOf(s);
@@ -12060,12 +12078,13 @@ function computeTuition(s, priv, ctx){
   // --- Holat + prorata (oy o'rtasida kelgan/ketgan; ISH KUNLARI bo'yicha) ---
   //   sinov -> faktura yo'q; muzlatilgan/chiqdi -> to'xtatish sanasidan keyin yo'q;
   //   activeFrom oy o'rtasida -> o'sha kundan prorata (qisman oy).
-  let proMeta=null, billedFrom, billedTo;
+  let proMeta=null, billedFrom, billedTo, proFrac=1;
   if(ctx && ctx.month){
     const bi=billingInterval(s, ctx.month);
     if(bi.skip) return { skip:true, skipReason:'status', statusSkip:true, statusReason:bi.reason, statusCode:bi.code||'', sid, name:s.name, priceKey };
     billedFrom=bi.startStr; billedTo=bi.endStr;   // hisoblangan oraliq (kasallik chegirmasi keyingi oyda shu kunlar bilan cheklanadi)
-    if(bi.partial && net>0){ net=round(net*bi.fraction); info=(info&&info!=='Chegirmasiz'?info+' · ':'')+`${bi.actDays}/${bi.fullDays} ish kuni (prorata)`; proMeta={proratedDays:bi.actDays, monthWorkdays:bi.fullDays}; }
+    // F2.7: ulush yalpi summaga ham qo'llanadi — 100% grantda ham (net 0) izohga yoziladi: baza tarkibni izohdan qayta chiqara oladi.
+    if(bi.partial){ proFrac=bi.fraction; if(net>0) net=round(net*bi.fraction); info=(info&&info!=='Chegirmasiz'?info+' · ':'')+`${bi.actDays}/${bi.fullDays} ish kuni (prorata)`; proMeta={proratedDays:bi.actDays, monthWorkdays:bi.fullDays}; }
   }
   // Kasal kun chegirmasi — prorataDAN KEYIN, FLAT (kunlik qat'iy summa, ulushga ko'paytirilMAYDI).
   // FAKTURAGA SIG'MAGAN KASAL KUNLAR JIM YO'QOLMAYDI (audit A2-08). Yagona qoida: har kasal kun faqat BIR marta va TO'LIQ stavkada
@@ -12078,6 +12097,7 @@ function computeTuition(s, priv, ctx){
   //     keyin to'liq qoplanadi. (Ilgari hamma kun shu fakturaga «qo'llangan» deb belgilanib, faktura 0 ga tushar, ortig'i yo'qolardi.)
   //   * eski qoida (davomatdagi «Bemor», kunlar kuzatilmaydi — keyingi oyga o'tkazib bo'lmaydi): faktura 0 gacha kamayadi, qoplanmagan
   //     qism sickLost bilan qaytariladi — generatsiya / qayta hisoblash xulosasida ogohlantiriladi (o'tish oyini belgilash kerak).
+  const netCat=net;   // F2.7: toifa foizi va prorata dan keyingi, kasal kundan oldingi summa (tarkib uchun)
   let sickCarry=0, sickLost=0;
   if(sickAmt>0 && sickAmt>net){
     if(ctx && ctx.sickNewRule){
@@ -12092,6 +12112,11 @@ function computeTuition(s, priv, ctx){
   }
   if(sickAmt>0){ net=Math.max(0, net-sickAmt); }
   const discount=base-net;
+  // F2.7: tarkib — har qism QOLDIQ sifatida (toifa: yalpi − toifa va prorata dan keyingi summa; kasal kun — haqiqatan ayirilgani), shuning
+  //   uchun net = gross − Σ parts aniq; tavsiya bonusi applyReferral(Units) da qo'shiladi. Toifa chegirmasi yo'q — yalpi = shu summa.
+  let gross=(proFrac<1)?round(base*proFrac):base; const parts={}, pkind=invPartKind(pct, bonusRef, info);
+  if(pkind && gross-netCat>0) parts[pkind]=gross-netCat; else gross=netCat;
+  if(netCat-net>0) parts.sick=netCat-net;
   // DIQQAT: net 0 bo'lsa ham AVTOMATIK «grant» deb belgilaMAYMIZ — «grant» FAQAT haqiqiy stipendiya
   //   (olimpiada / monitoring 100%, yuqorida isGrant=true qilingan). Boshqa sabab (kasal kun, prorata,
   //   referral) net'ni 0 qilsa — hisob «to'landi» bo'ladi, lekin «Grant» yorlig'i QO'YILMAYDI (provider='').
@@ -12099,12 +12124,12 @@ function computeTuition(s, priv, ctx){
   const status=(net===0)?'paid':'pending';
   // approvalRefs — chegirma tasdiqlari (discount-approval.sql): pmLoadCtx samarali maxfiy maydonlarga qo'shadi (_approvalRefs).
   const approvalRefs=Array.isArray(pv._approvalRefs)?pv._approvalRefs.slice():[];
-  return { skip:false, sid, base, net, discount, pct, sickN, sickAmt, sickRefs, sickCarry, sickLost, bonusRef, approvalRefs, info, isGrant, status, priceKey, fallback:usedFallback, prorated:!!proMeta, proMeta, billedFrom, billedTo };
+  return { skip:false, sid, base, net, discount, gross, parts, pct, sickN, sickAmt, sickRefs, sickCarry, sickLost, bonusRef, approvalRefs, info, isGrant, status, priceKey, fallback:usedFallback, prorated:!!proMeta, proMeta, billedFrom, billedTo };
 }
 // Referral: bir martalik 300 000 — referrerning hisob-fakturasiga CHEGIRMA (kredit emas — soxta daromad bo'lmasin, qayta-hisoblashga bardoshli).
 function applyReferral(t, amt){ amt=Number(amt)||0; if(amt<=0||t.skip) return 0;
   const applied=Math.min(amt, t.net); if(applied<=0) return 0;   // net 0 (grant) bo'lsa qo'llanmaydi -> keyingi safar
-  t.net-=applied; t.discount+=applied;
+  t.net-=applied; t.discount+=applied; if(t.parts) t.parts.referral=(t.parts.referral||0)+applied;   // F2.7 tarkib
   const base=(t.info && t.info!=='Chegirmasiz')?t.info+' · ':'';
   t.info=base+`Referral −${applied}`;
   if(t.net===0){ t.status='paid'; }
@@ -12121,7 +12146,7 @@ function applyReferralUnits(t, existAmt, pendingIds, unit){
   const n=(UNIT>0 && isFinite(UNIT)) ? Math.max(0, Math.min(pendingIds.length, Math.floor(room/UNIT))) : 0;   // faqat to'liq sig'gan yangi referrallar
   applied += n*UNIT;
   const usedIds=pendingIds.slice(0, n);
-  if(applied>0){ t.net-=applied; t.discount+=applied;
+  if(applied>0){ t.net-=applied; t.discount+=applied; if(t.parts) t.parts.referral=(t.parts.referral||0)+applied;   // F2.7 tarkib
     const base=(t.info && t.info!=='Chegirmasiz')?t.info+' · ':''; t.info=base+`Referral −${applied}`;
     if(t.net===0){ t.status='paid'; } }
   return { applied, usedIds };
@@ -12138,7 +12163,8 @@ function reconcileInvoice(inv, t){
   else status='pending';
   const changed = (Number(iv.amount)||0)!==net || (Number(iv.paidAmount)||0)!==paidAmount
     || String(iv.status||'')!==status || String(iv.discountInfo||'')!==String(t.info)
-    || (!!iv.isGrant)!==(!!t.isGrant) || (iv.provider==='grant' && !t.isGrant);   // eski STALE 'grant' yorlig'ini ham tozalash
+    || (!!iv.isGrant)!==(!!t.isGrant) || (iv.provider==='grant' && !t.isGrant)   // eski STALE 'grant' yorlig'ini ham tozalash
+    || !invPartsSame(iv, t);   // F2.7: tarkib (yalpi / turlar) eskirgan — masalan, server eski fakturadan taxminan chiqargan
   return { amount:net, paidAmount, status, creditExcess, isGrant:!!t.isGrant, changed };
 }
 // opts (D1, discount-approval.sql): { newRule — o'tish oyidan faqat Moliya menejeri TASDIQLAGAN tavsiya (referral_requests
@@ -12905,7 +12931,7 @@ async function renderPayments(){
     const rowHtml=(r,n)=>{ const d=debtOf(r); return `<tr>
       <td data-label="№" style="text-align:center;color:var(--muted);font-variant-numeric:tabular-nums">${n}</td>
       <td data-label="O‘quvchi">${esc(nameOf(r))}<div class="small muted">${esc(r.studentId||'')}</div></td>
-      <td data-label="Summa">${fmtSom(r.amount)}${(Number(r.discount)>0)?` <span class="chip" style="background:#eef6f2;color:#1F9982" title="${esc(r.discountInfo||'')}">−${fmtSom(r.discount)}</span>`:''}</td>
+      <td data-label="Summa">${fmtSom(r.amount)}${(Number(r.discount)>0)?` <span class="chip" style="background:#eef6f2;color:#1F9982" title="${esc([r.discountInfo||'', invPartsText(r)].filter(Boolean).join('\n'))}">−${fmtSom(r.discount)}</span>`:''}</td>
       <td data-label="To‘langan">${paidOf(r)>0?fmtSom(paidOf(r)):'<span class="muted">—</span>'}</td>
       <td data-label="Qarzdorlik">${d>0?`<b style="color:#B42318">${fmtSom(d)}</b>`:'<span class="muted">—</span>'}</td>
       <td data-label="Holat">${stBadge(r)}</td>
@@ -13055,6 +13081,7 @@ async function renderPayments(){
           const rRef=applyReferralUnits(t, existRef[sid]||0, pendingRef[sid]||[], refUnit);
           const inv={ studentId:sid, studentName:s.name||sid, classKey:classKeyOf(s), month,
             amount:t.net, baseAmount:t.base, discount:t.discount, discountInfo:t.info, isGrant:!!t.isGrant,
+            grossAmount:t.gross, discountParts:t.parts,   // F2.7: faktura tarkibi (baza tekshiradi, mos kelmasa o'zi hisoblaydi)
             pctApplied:t.pct, sickDaysApplied:t.sickN, sickAmount:t.sickAmt, sickNoteRefs:t.sickRefs||{}, bonusRef:t.bonusRef||'', approvalRefs:t.approvalRefs||[], priceKey:t.priceKey,
             billedFrom:t.billedFrom||'', billedTo:t.billedTo||'',   // hisoblangan kunlar oralig'i (discounts.sql ustunlari)
             referralUsedIds:rRef.usedIds,   // qaysi referrallar BU invoice'da ishlatilgani (repair/audit uchun)
@@ -13187,6 +13214,7 @@ async function renderPayments(){
       // Har faktura — qulflangan RPC (reprice_invoice): JORIY (qulf ostidagi) to'lov bilan qayta hisoblanadi,
       //   oraliqda kelgan to'lov ustiga YOZILMAYDI. RPC yo'q (eski baza) -> avvalgi (snapshot) yo'l.
       const metaOf=w=>({ studentName:(w.s.name||w.inv.studentName||w.sid), classKey:classKeyOf(w.s), baseAmount:w.t.base, discount:w.t.discount,
+        grossAmount:w.t.gross, discountParts:w.t.parts,   // F2.7: faktura tarkibi
         discountInfo:w.t.info, isGrant:!!w.rc.isGrant, pctApplied:w.t.pct, sickDaysApplied:w.t.sickN, sickAmount:w.t.sickAmt, sickNoteRefs:w.t.sickRefs||{}, bonusRef:w.t.bonusRef||'', approvalRefs:w.t.approvalRefs||[], priceKey:w.t.priceKey,
         billedFrom:w.t.billedFrom||'', billedTo:w.t.billedTo||'', referralUsedIds:w.rRef.usedIds });
       const legacyWrite=async w=>{   // eski baza: avvalgi xatti-harakat (avans add_credit bilan AVVAL, keyin faktura)
