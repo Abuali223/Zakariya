@@ -29,8 +29,8 @@ turning o‘z raqami bor; raqamni tizim beradi, har yili 1 dan boshlanadi, bo‘
 Kassir — **G‘aznachi** lavozimidagi xodim, tizimda **«Kassir»** roli bilan ishlaydi. U kassa egasi: kirim («💵 To‘lov», «+ Kirim») va chiqim
 («+ Chiqim so‘rovi» → tasdiq → «Pulni berish») hujjatlarini yozadi, kunni ochadi (birinchi hujjat bilan) va yopadi, kunlik hisobotni
 tayyorlaydi («🖨 Kunlik hisobot», «🖨 KO-4»). O‘rinbosar — buyruq bilan tayinlangan xodim: o‘z roliga qo‘shimcha «Kassir» roli
-beriladi, kassada «Kassir» rolida ishlaydi (sarlavhada «Rol: … ▾» bo‘lsa — undan «Kassir»ni tanlab). «G‘aznachi» tizim roli kassa xodimiga berilmaydi (unda
-moliya huquqlari bor) — hisobingizda shu rol bo‘lsa, Direktorga ayting. Naqd pulni faqat shu ikkisi oladi va beradi (Direktor —
+beriladi, kassada «Kassir» rolida ishlaydi (sarlavhada «Rol: … ▾» bo‘lsa — undan «Kassir»ni tanlab). «G‘aznachi» tizim roli kassa xodimiga berilmaydi (asosiy
+rol — «Kassir») — hisobingizda shu rol bo‘lsa, Direktorga ayting. Naqd pulni faqat shu ikkisi oladi va beradi (Direktor —
 faqat favqulodda holatda). Kassa ish kunlari — dushanba–juma (shanba, yakshanba va bayram kunlari yopiq).
 
 **Ertalab.** «Kassa» sahifasini oching. Yuqorida kun kartasi: kun boshi, kirim, chiqim, kassadagi qoldiq va kassa egasi
@@ -371,8 +371,8 @@ va o‘zingiznikini 30-dekabrgacha xodim kartasiga bog‘lang (kartada F.I.Sh. t
 yuborilishidan oldin, aks holda ularning o‘z maosh qatori sizning tasdig‘ingizni talab qilmaydi); 2 ta takroriy maosh ID — xodim
 kartasida «Yangi noyob ID berish» (aks holda vedomost HR’ga yuborilmaydi); buxgalterga «Buxgalter» roli — yashirin o‘rnatishdan
 keyin; kassirga (G‘aznachi lavozimidagi xodim) — «Kassir» roli, o‘rinbosarga — qo‘shimcha «Kassir» roli («Foydalanuvchilar» →
-«➕ Lavozim»); «G‘aznachi» rolini kassa xodimiga bermang (unda moliya huquqlari bor): hozir shu roldagi hisob naqd bilan ishlasa —
-«Tahrirlash»da rolini «Kassir»ga almashtiring; «Bayram / ta’til kunlari»ga yanvar bayram va ta’til kunlari; «Xabarnomalar» → «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju,
+«➕ Lavozim»); «G‘aznachi» rolini kassa xodimiga bermang (asosiy rol — «Kassir»; F2.9 yangilanishidan keyin «G‘aznachi» huquqlari ham
+kassirnikiga teng): hozir shu roldagi hisob naqd bilan ishlasa — «Tahrirlash»da rolini «Kassir»ga almashtiring; «Bayram / ta’til kunlari»ga yanvar bayram va ta’til kunlari; «Xabarnomalar» → «📊 Direktorga kunlik hisobot»: kunlar — Du–Ju,
 soat — kassa yopilgandan keyin (standart 19:00).
 
 **Xodim kartasi ↔ login va o‘z maoshi (16-noyabr haftasidagi yangilanish).** Bu paragraf yangilanish kuni beriladi (o‘qitishni
@@ -441,7 +441,23 @@ Click / Uzum to‘lovida ishlayveradi, kabinetga farzand qo‘shishda — yo‘q
 | Yuridik shaxsga kassadan naqd to‘lov | «So‘rovlar» → «Tasdiqlash» | chegara — «⚙ Sozlamalar» (bo‘sh — har doim Direktor); asosiy yo‘l — bank; turi tasdiqlanmagan «jismoniy shaxs» / «boshqa» ham yuridik shaxs hisoblanadi; tur so‘rovdan keyin o‘zgargan bo‘lsa — so‘rov tasdiqda yoki pul berishda Direktorga qaytadi |
 | Kontragent turini tasdiqlash (buxgalter ham) | «Nazorat ro‘yxati» → «Kontragent turi» → «✓ …» | «Jismoniy shaxs» / «Boshqa» — faqat haqiqiy fuqaro yoki YaTT; Direktor yoki buxgalter kiritgan / o‘zgartirgan tur darhol tasdiqlangan |
 | Sozlamalar, imzo egalari, boshlang‘ich qoldiq | «⚙ Sozlamalar» | chegaralarni faqat Direktor o‘zgartiradi |
+| To‘g‘ridan-to‘g‘ri yozuvlar qulfi — yoqish va o‘chirish (F2.9) | «⚙ Sozlamalar» → «To‘g‘ridan-to‘g‘ri yozuvlar (pul jadvallari)» | yoqish — detektor kamida 7 kun ishlagan va oxirgi 7 kunda yozuv bo‘lmasa (belgi shundagina faol); o‘chirish — orqaga qaytarish, darhol (deploy kerak emas); ikkalasi tasdiq oynasi bilan, «O‘zgarishlar tarixi»da qoladi |
 | KO-3, oylik kassa to‘plami, qarzdorlar CSV va «Buxgalteriya» A4 hisobotining to‘liq (ismli) nusxasi | «Kassa» → «KO-3» → «⬇ Excel»; «Statiyalar» → «⬇ Oylik to‘plam»; «Moliya» → qarzdorlar «⬇ CSV»; «Buxgalteriya» → «📄 A4 hisobot» | boshqalarga ismsiz nusxa chiqadi (FD-28; «Xodimlar davomati» oylik hisoboti HR’da ham ismli); ismli faylda shaxsiy ma’lumot bor — ehtiyot bilan saqlanadi |
+
+**To‘g‘ridan-to‘g‘ri yozuvlar detektori va qulfi (F2.9; yangilanishdan keyin).** Tizim pul jadvallariga (to‘lov yozuvlari,
+faktura to‘lovi, o‘quvchi avansi va avans jurnali, hujjatsiz xarajat) tizim funksiyasini chetlab yozilgan har yozuvni qayd qiladi —
+masalan yangilanmagan eski sahifa yoki dasturdagi unutilgan oqim. Nazorat ro‘yxatidagi «To‘g‘ridan-to‘g‘ri yozuvlar (pul jadvallari)»
+qatori: «joyida» — yozuv yo‘q (yoki qulf yoqiq); «diqqat» — oxirgi 7 kunda yozuv bor; «ma’lumot» — 7 kun yozuvsiz o‘tdi, qulfni yoqish
+mumkin. Ro‘yxat — «⚙ Sozlamalar»da (oxirgi 30 kun: sana, nima o‘zgardi, qaysi yozuv, manba — sahifa / server / funksiya, kim). Yozuv
+chiqsa — o‘sha xodimdan sahifani yangilashni so‘rang va ro‘yxatni dasturchiga yuboring (yozuvning o‘zini qo‘lda tuzatmang). 7 kun
+yozuvsiz o‘tgach qulfni yoqing: shundan keyin tizim funksiyasidan tashqari yozuv rad etiladi (xodim «… faqat to‘lov funksiyalari
+orqali …» / «Xarajat faqat «Buxgalteriya» xarajat oynasi (hujjat bilan) orqali yoziladi …» xabarini ko‘radi — sahifani yangilaydi).
+Kundalik ish (to‘lov, biriktirish, «Bekor», qaytarish, xarajat oynasi, Click / Uzum) qulf bilan o‘zgarmaydi. Xabar yangilangan
+sahifada ham takrorlansa — qulfni o‘chiring (darhol ishlaydi) va dasturchiga xabar bering.
+
+**G‘aznachi va marketing (F2.9).** «G‘aznachi» tizim rolida endi kassir huquqlari: faktura yaratish va bekor qilish, xarajat, avans
+qo‘shish, qaytarish — yo‘q (Moliya menejeri yoki siz). Marketing xodimi «Buxgalteriya» xarajatlarini ko‘rmaydi — marketing sahifasida
+faqat «Marketing» / «Reklama» xarajatining oylar bo‘yicha jami.
 
 Kassa egasi (kun kassiri) yo‘qligida kunni boshqa kassir, Direktor yoki moliya menejeri yopishi, smenani — boshqa kassir yoki
 Direktor topshirishi mumkin — kamida 2 kishilik komissiya bilan (kassir o‘rniga; dalolatnomada kassa egasi va pulni sanagan xodim

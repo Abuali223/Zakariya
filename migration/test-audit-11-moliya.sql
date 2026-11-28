@@ -292,11 +292,18 @@ select zz.chk('K03 statiya nomi bilan', zz.as('U_DIR', $q$select public.finance_
 select zz.chk('K00 jonli zanjir (kassa moduli yo''q): bo''sh natija, xatosiz',
   zz.as('U_DIR', $q$select public.finance_other_income()::text$q$), '^\{"months": \{\}\}$');
 \endif
-select zz.chk('K04 Moliya menejeri, g''aznachi, buxgalter ham o''qiydi (Direktor bilan bir xil natija, xatosiz)',
+select zz.chk('K04 Moliya menejeri va buxgalter ham o''qiydi (Direktor bilan bir xil natija, xatosiz)',
   (select (zz.as('U_DIR', $q$select public.finance_other_income()::text$q$) like '{"months": %')::text
        || (zz.as('U_FM', $q$select public.finance_other_income()::text$q$) = zz.as('U_DIR', $q$select public.finance_other_income()::text$q$))::text
-       || (zz.as('U_TRE', $q$select public.finance_other_income()::text$q$) = zz.as('U_DIR', $q$select public.finance_other_income()::text$q$))::text
-       || (zz.as('U_ACC', $q$select public.finance_other_income()::text$q$) = zz.as('U_DIR', $q$select public.finance_other_income()::text$q$))::text), '^truetruetruetrue$');
+       || (zz.as('U_ACC', $q$select public.finance_other_income()::text$q$) = zz.as('U_DIR', $q$select public.finance_other_income()::text$q$))::text), '^truetruetrue$');
+\if :has_kassa
+-- F2.9 (RF-11, fin-guard.sql): g'aznachi = kassa operatori (kassir bilan teng) — moliya menejeri huquqlari (shu hisobot ham) yo'q
+select zz.chk('K04b g''aznachi — kassir bilan teng (F2.9, RF-11): moliya hisobotiga ruxsat yo''q',
+  zz.as('U_TRE', $q$select public.finance_other_income()::text$q$), '^ERR 42501 ');
+\else
+select zz.chk('K04b g''aznachi (kassa modulisiz zanjir — moliya huquqlari avvalgidek) o''qiydi',
+  (zz.as('U_TRE', $q$select public.finance_other_income()::text$q$) = zz.as('U_DIR', $q$select public.finance_other_income()::text$q$))::text, '^true$');
+\endif
 select zz.chk('K05 kassir, o''qituvchi va anonim — ruxsat yo''q',
   zz.as('U_KAS', $q$select public.finance_other_income()::text$q$) || ' | ' || zz.as('U_TEA', $q$select public.finance_other_income()::text$q$) || ' | ' || zz.as(null, $q$select public.finance_other_income()::text$q$),
   '^ERR 42501 .* \| ERR 42501 .* \| ERR 42501 ');

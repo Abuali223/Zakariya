@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 25;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 26;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -253,7 +253,8 @@ const BLOCK_TXT = {
 };
 
 const $ = s => C.$(s);
-const esc = s => C.esc(s);
+// sahifa ctx'i bo'lmasa (node sinovi — sof funksiyalar) — admin.html esc bilan bir xil ekranlash
+const esc = s => (C && C.esc) ? C.esc(s) : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = v => Number(v) || 0;
 // Pul: «1 234 567 so‘m» (tiyin bo'lsa — «1 234,50 so‘m»). admin.html fmtSom tiyinni noto'g'ri ko'rsatadi, shuning uchun o'zimizniki.
 const som = v => { const n = Math.round(num(v) * 100) / 100, a = Math.abs(n), w = Math.floor(a), t = Math.round((a - w) * 100);
@@ -1503,6 +1504,7 @@ function openSettings() {
   const depDays = Array.isArray(ex.depositDays) ? ex.depositDays.map(Number) : [5];   // kalit yo'q — juma (server bilan bir xil)
   const depOk = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 16;      // inkassatsiya jadvali — server 16-reliz va undan keyin
   const advOk = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 25;      // F2.6b: avans hisoboti muddati va bloklash
+  const guardOk = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 26;    // F2.9: to'g'ridan-to'g'ri yozuv detektori va qulfi
   const v = k => esc(o[k] == null ? '' : String(o[k]));
   const nv = k => esc(num(o[k]) ? String(num(o[k])).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '');
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa sozlamalari</h3><button class="x" id="m-x">×</button></div>
@@ -1521,6 +1523,9 @@ function openSettings() {
       <div class="small muted" style="margin-top:4px">Yuridik shaxslar bilan hisob-kitob asosan bank orqali (yoki hisobdor shaxs — avans hisoboti bilan); chegarani buxgalter hisob siyosatida tasdiqlaydi.</div>
       ${advOk ? `<div class="grid2">${lbl('Avans hisoboti muddati (maktab ish kunlari, 1–30)', `<input id="kx-advdays" type="number" inputmode="numeric" min="1" max="30" step="1" value="${esc(String(num(ex.advDays) || 3))}" style="${FLD}">`)}${lbl('Muddati o‘tganda', `<label class="small" style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="kx-advblock" style="${CHK}"${ex.advBlock === true ? ' checked' : ''}> yangi avans berilmasin (bloklash)</label>`)}</div>
       <div class="small muted" style="margin-top:4px">Hisobdor avans olgan kundan keyin shu muddatda avans hisobotini topshiradi (FD-14: 3 ish kuni; dam olish va «Bayram / ta’til kunlari» sanalmaydi). Bloklash yoqilsa — muddati o‘tgan avansi bor xodimga yangi «Hisobdorga avans» so‘rovi ham, pul berish ham rad etiladi; o‘chiq bo‘lsa — faqat ogohlantirish (nazorat ro‘yxati, RP-07).</div>` : ''}
+      ${guardOk ? `<div class="small" style="font-weight:700;margin-top:16px">To‘g‘ridan-to‘g‘ri yozuvlar — to‘lov, faktura to‘lovi, avans, xarajat</div>
+      <div class="small muted" style="margin-top:4px" id="kx-guard">Detektor holati yuklanmoqda…</div>
+      <label class="small" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="kx-dguard" style="${CHK}"${ex.directGuard ? ' checked' : ' disabled'}> Yopish (qulf): bu jadvallarga faqat tizim funksiyalari yozadi</label>` : ''}
       <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek. Kassa ishlagandan keyin sanani bo‘shatish yoki surish — kassani <b>to‘xtatish</b> (ishga-tushirish §9: ochiq kun, qurilma navbatida qolgan yozuvlar bilan yopilgan oxirgi kun va pul berilmagan so‘rovlar bo‘lmasligi kerak); qayta ishga tushirish — komissiya sanashi bilan («Qayta ishga tushirish»).</div>
       <div class="small" style="font-weight:700;margin-top:16px">Imzo egalari (chop etiladigan hujjatlarda)</div>
       <div class="small muted" style="margin-top:4px">1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya. Ro‘yxatda bitta shaxs bo‘lsa — hujjatga o‘zi yoziladi; bir nechta bo‘lsa — hujjatni tizimda tasdiqlagan shaxs, agar uning hisobi shu ro‘yxatdagi biriga bog‘langan bo‘lsa (shu yerdagi to‘liq F.I.Sh. bilan); aks holda F.I.Sh. qo‘lda yoziladi. Qo‘shish va o‘chirish darhol saqlanadi.</div>
@@ -1531,6 +1536,11 @@ function openSettings() {
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="kx-save">Saqlash</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
   ['#kx-t1', '#kx-l1', '#kx-limit', '#kx-orgmax'].concat(depOk ? ['#kx-keep'] : []).forEach(s => fmtInput($(s)));
+  // F2.9: detektor hisoboti (Direktor) — yopish faqat «7 kun 0 yozuv» bo'lganda (server ham tekshiradi); hisobot olinmasa — belgi ochiq
+  if (guardOk) call('fin_guard_report', { p_days: 30 }).then(r => {
+    const box = $('#kx-guard'), cb = $('#kx-dguard'); if (!box || !box.isConnected) return;
+    box.innerHTML = guardHtml(r); if (cb && !ex.directGuard) cb.disabled = !(r && r.canEnforce);
+  }).catch(e => { const box = $('#kx-guard'), cb = $('#kx-dguard'); if (box && box.isConnected) box.textContent = 'Detektor holati olinmadi: ' + errText(e); if (cb && !ex.directGuard) cb.disabled = false; });
   // kassa limiti tavsiyasi — asosiy kassa bo'yicha (sahifada sinov kassasi tanlangan bo'lsa — asosiy kassa holatidan)
   const hintBox = $('#kx-limhint');
   if (hintBox && ST.desk && ST.desk !== 'main') {
@@ -1567,6 +1577,10 @@ function openSettings() {
     let advDays = null;
     if (advOk) { advDays = Number($('#kx-advdays').value); if (!Number.isInteger(advDays) || advDays < 1 || advDays > 30) { C.toast('Avans hisoboti muddati — 1 dan 30 gacha butun son (ish kunlari)', true); $('#kx-advdays').focus(); return; } }
     const live = $('#kx-live').value || null;
+    const dg = guardOk && $('#kx-dguard') ? !!$('#kx-dguard').checked : !!ex.directGuard;
+    if (dg !== !!ex.directGuard && !confirm(dg
+      ? 'To‘g‘ridan-to‘g‘ri yozuv yopilsinmi?\n\nShundan keyin to‘lov yozuvi, faktura to‘lovi, avans va hujjatsiz xarajatni faqat tizim funksiyalari yozadi (eski sahifa va qo‘lda yozuv rad etiladi). Kerak bo‘lsa shu yerdan qayta ochiladi.'
+      : 'Qulf ochilsinmi (orqaga qaytarish)?\n\nTo‘g‘ridan-to‘g‘ri yozuvlar yana qabul qilinadi va detektor jurnaliga yoziladi.')) return;
     // ui-5: kelgan sanani bo'shatish / surish — kassani to'xtatish (alohida, oqibatlari yozilgan tasdiq); to'xtatilgan kassada — qayta
     //   ishga tushirish kuni. Holat — asosiy kassaniki (sahifada sinov kassasi tanlangan bo'lishi mumkin); server baribir tekshiradi.
     if (live !== (o.kassaGoLive || null)) {
@@ -1583,7 +1597,9 @@ function openSettings() {
         ...(depOk
           ? { depositDays: [...$('#modal').querySelectorAll('[data-dep]')].filter(x => x.checked).map(x => Number(x.dataset.dep)), depositKeep: nums.depositKeep } : {}),
         // F2.6b: avans hisoboti muddati va bloklash (server 25-reliz va undan keyin)
-        ...(advOk ? { advDays, advBlock: !!$('#kx-advblock').checked } : {}) } });
+        ...(advOk ? { advDays, advBlock: !!$('#kx-advblock').checked } : {}),
+        // F2.9: qulf — faqat o'zgarganda (yoqish «7 kun 0 yozuv» sharti bilan — server tekshiradi; 26-relizdan oldingi serverga yuborilmaydi)
+        ...(guardOk && dg !== !!ex.directGuard ? { directGuard: dg } : {}) } });
       await loadRefs(true); C.closeModal(); C.toast('Sozlamalar saqlandi ✓'); await reload(); if (C.onChange) C.onChange(); }
     catch (e) { $('#kx-save').disabled = false; C.toast(errText(e), true); }
   };
@@ -2157,6 +2173,15 @@ export function controlRows(c) {
         .filter(Boolean).join('; ') || 'yo‘q',
       'To‘xtatilgan davrda naqd pul kassa hujjatisiz yoziladi; qayta ishga tushirishda sanalgan summa bilan oxirgi qoldiq farqi texnik dalolatnoma (0000) — buxgalter uni shu davrdagi kirim − chiqim bilan solishtiradi (izohlanmagan farq qolmasligi kerak: aks holda u kamomad yoki ortiqcha)');
   }
+  // F2.9: pul jadvallariga to'g'ridan-to'g'ri yozuvlar detektori — faqat Direktorga (server c.direct beradi; boshqalarga null)
+  if (c.direct) {
+    //   yozuv bor — «diqqat»; 7 kun toza va qulf o'chiq — «ma'lumot» (yopish mumkin); qolgani (detektor yangi yoki qulf yoqiq) — joyida
+    const dn = num(c.direct.n7), on = c.direct.mode === 'enforce', can = !on && !dn && c.direct.canEnforce === true;
+    add('direct', 'To‘g‘ridan-to‘g‘ri yozuvlar (pul jadvallari)', dn ? 'warn' : can ? 'info' : 'ok',
+      dn ? `oxirgi 7 kunda ${cnt(dn)} — ro‘yxati «⚙ Sozlamalar»da` : on ? 'yopilgan (qulf yoqiq)'
+        : `oxirgi 7 kunda yo‘q · detektor ${c.direct.since ? dmy(c.direct.since) + ' dan' : 'ishlayapti'}${can ? ' — «⚙ Sozlamalar»da yopish mumkin' : ''}`,
+      'Sahifa yoki server to‘lov, faktura to‘lovi, avans yoki hujjatsiz xarajatni tizim funksiyasini chetlab yozsa — qayd qilinadi; 7 kun yozuvsiz o‘tgach Direktor «⚙ Sozlamalar»da yopadi');
+  }
   return rows;
 }
 const CASH_KIND = { tuition: 'o‘quv to‘lovi', expense: 'xarajat', salary: 'maosh', advance: 'avans', refund: 'qaytarish' };
@@ -2262,6 +2287,22 @@ export function depositDaysText(days) {   // [5] → «har juma»; [2, 5] → «
   if (xs.length === 5 && [1, 2, 3, 4, 5].every(d => xs.includes(d))) return 'har ish kuni';
   const n = xs.map(d => WD_LONG[d]);
   return 'har ' + (n.length === 1 ? n[0] : n.slice(0, -1).join(', ') + ' va ' + n[n.length - 1]);
+}
+// F2.9: detektor hisoboti (fin_guard_report) → «⚙ Sozlamalar» matni (HTML, qiymatlar ekranlangan). Guruh / manba / amal — o'zbekcha.
+const DG_GRP = { payments: 'to‘lov yozuvi', invoices: 'faktura to‘lovi', credit: 'avans', expenses: 'xarajat (hujjatsiz)' };
+const DG_VIA = { rest: 'sahifa', server: 'to‘lov serveri', rpc: 'bayroqsiz funksiya' };
+const DG_OP = { INSERT: 'qo‘shildi', UPDATE: 'o‘zgardi', DELETE: 'o‘chirildi' };
+export function guardHtml(r) {
+  if (!r) return '';
+  if (r.mode === 'enforce') return 'Yopilgan: bu jadvallarga sahifa va server faqat tizim funksiyalari orqali yozadi. Ochish (orqaga qaytarish) — belgini olib, saqlang.';
+  const n7 = num(r.n7);
+  const head = `Detektor ${r.since ? esc(dmy(r.since)) + ' dan' : ''} ishlayapti; oxirgi 7 kunda — ${n7 ? `<b>${n7} ta yozuv</b>` : 'yozuv yo‘q'}. `
+    + (r.canEnforce ? 'Yopish mumkin (7 kun yozuvsiz).'
+      : n7 ? 'Yopish uchun 7 kun yozuvsiz o‘tishi kerak — quyidagi manbalarni aniqlang (eski sahifa, qo‘lda yozuv, yangi funksiya).'
+        : `Yopish mumkin: ${r.enforceFrom ? esc(dmy(r.enforceFrom)) + ' dan' : '7 kundan keyin'}.`);
+  const rec = (r.recent || []).slice(0, 10).map(x => `<li>${esc(dmy(tkDate(x.at)))} ${esc(hm(x.at))} — ${esc(DG_GRP[x.grp] || x.grp)} ${esc(DG_OP[x.op] || x.op)}`
+    + ` (${esc(x.tbl)}${x.rowId ? ' · ' + esc(x.rowId) : ''}) · ${esc(DG_VIA[x.via] || x.via)} · ${esc(x.actorName || x.actorRole || '—')}</li>`).join('');
+  return head + (rec ? `<ul style="margin:6px 0 0 18px;padding:0">${rec}</ul>` : '');
 }
 export function limitHintTxt(h) {   // kassa limiti tavsiyasi (kassa_state.deposit.limitHint) — bankka ariza uchun
   if (!h || !num(h.days)) return 'Kassa limiti bank bilan kelishiladi; tavsiya kassa kamida bir necha kun ishlagach hisoblanadi.';

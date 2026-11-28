@@ -7,7 +7,7 @@ import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTx
   deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
   pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN, outboxDeclare, deskOutbox, bookCoverWhy, verifyLink,
   canApproveAdv, canApproveDoc, advSplit, advSuggest, advOver, advApproveText, accCardRows,
-  RECEIPT_MAX, receiptCheck, uuid4, receiptPath, canAddAdvFiles } from './fin-kassa.js';
+  RECEIPT_MAX, receiptCheck, uuid4, receiptPath, canAddAdvFiles, guardHtml } from './fin-kassa.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -856,4 +856,28 @@ test('F2.6b cheklar surati: tur va hajm tekshiruvi, UUID va saqlash yo‘li (ser
   assert.match(advApproveText({ partyName: 'X', amount: 1000, filesN: 2 }), /Cheklar surati: 2 ta/);
   assert.match(advApproveText({ partyName: 'X', amount: 1000, filesN: 0 }), /Cheklar surati: biriktirilmagan/);
   assert.ok(!advApproveText({ partyName: 'X', amount: 1000 }).includes('Cheklar surati'));   // eski server (filesN yo'q)
+});
+
+test('F2.9 to‘g‘ridan-to‘g‘ri yozuvlar: nazorat qatori (faqat Direktorga — c.direct), sozlamalardagi detektor matni (ekranlangan)', () => {
+  assert.equal(by(controlRows(clean())).direct, undefined);   // Direktor emas — server direct bermaydi
+  let r = by(controlRows({ ...clean(), direct: { mode: 'detect', since: '2027-01-02', n7: 0, canEnforce: false } })).direct;
+  assert.equal(r.level, 'ok'); assert.match(r.value, /^oxirgi 7 kunda yo‘q · detektor 02\.01\.2027 dan$/);   // detektor yangi — joyida
+  r = by(controlRows({ ...clean(), direct: { mode: 'detect', since: '2027-01-02', n7: 0, canEnforce: true } })).direct;
+  assert.equal(r.level, 'info'); assert.match(r.value, /yo‘q · detektor 02\.01\.2027 dan — «⚙ Sozlamalar»da yopish mumkin$/);
+  r = by(controlRows({ ...clean(), direct: { mode: 'detect', since: '2027-01-02', n7: 2, canEnforce: true } })).direct;   // eski javob aralash bo'lsa ham — yozuv ustun
+  assert.equal(r.level, 'warn'); assert.doesNotMatch(r.value, /yopish mumkin/);
+  r = by(controlRows({ ...clean(), direct: { mode: 'detect', since: '2027-01-02', n7: 3 } })).direct;
+  assert.equal(r.level, 'warn'); assert.match(r.value, /3 ta — ro‘yxati «⚙ Sozlamalar»da/);
+  r = by(controlRows({ ...clean(), direct: { mode: 'enforce', since: '2027-01-02', n7: 0 } })).direct;
+  assert.equal(r.level, 'ok'); assert.match(r.value, /yopilgan/);
+  assert.equal(guardHtml(null), '');
+  assert.match(guardHtml({ mode: 'enforce' }), /^Yopilgan:/);
+  let h = guardHtml({ mode: 'detect', since: '2027-01-02', n7: 0, canEnforce: true, recent: [] });
+  assert.match(h, /02\.01\.2027 dan ishlayapti; oxirgi 7 kunda — yozuv yo‘q\. Yopish mumkin \(7 kun yozuvsiz\)\./);
+  h = guardHtml({ mode: 'detect', since: '2027-01-02', n7: 0, canEnforce: false, enforceFrom: '2027-01-09', recent: [] });
+  assert.match(h, /Yopish mumkin: 09\.01\.2027 dan\./);
+  h = guardHtml({ mode: 'detect', since: '2027-01-02', n7: 1, canEnforce: false, enforceFrom: '2027-01-09',
+    recent: [{ at: '2027-01-05T09:30:00Z', grp: 'invoices', op: 'UPDATE', tbl: 'invoices', rowId: 'S1__2027-01', via: 'rest', actorName: '<b>X</b>', actorRole: 'director' }] });
+  assert.match(h, /<b>1 ta yozuv<\/b>/); assert.match(h, /manbalarni aniqlang/);
+  assert.match(h, /<li>05\.01\.2027 14:30 — faktura to‘lovi o‘zgardi \(invoices · S1__2027-01\) · sahifa · &lt;b&gt;X&lt;\/b&gt;<\/li>/);
 });

@@ -210,7 +210,7 @@ language sql immutable set search_path = pg_temp as $$
   select case lower(coalesce(p, ''))
     when 'click' then 'Click' when 'uzum' then 'Uzum' when 'payme' then 'Payme' when 'cash' then 'Naqd' when 'naqd' then 'Naqd'
     when 'bank' then 'Bank' when 'transfer' then 'Bank' when 'terminal' then 'Terminal' when 'card' then 'Karta'
-    when 'mixed' then 'Aralash' when 'credit' then 'Avans' when 'grant' then 'Grant' when 'reattr' then 'Avans ko''chirish'
+    when 'mixed' then 'Aralash' when 'fix' then 'Tuzatish' when 'credit' then 'Avans' when 'grant' then 'Grant' when 'reattr' then 'Avans ko''chirish'
     when 'offset' then 'O''zaro hisob (ish haqidan)' when 'nc_offset' then 'O''zaro hisob (ish haqidan)'
     when 'boshqa' then 'Boshqa' when '' then ''
     else p end
@@ -413,7 +413,7 @@ begin
     select u.m from (select m from inv union select m from rc union select m from ex union select m from rf union select m from oth) u
      where u.m ~ '^\d{4}-\d{2}$' and (p_from is null or u.m >= p_from)),
   pv as (
-    select x.pv, row_number() over (order by coalesce(array_position(array['cash', 'terminal', 'click', 'uzum', 'payme', 'bank', 'mixed',
+    select x.pv, row_number() over (order by coalesce(array_position(array['cash', 'terminal', 'click', 'uzum', 'payme', 'bank', 'mixed', 'fix',
                                                                             'credit', 'grant', 'offset', 'boshqa'], x.pv), 100), x.pv) as ord
       from (select distinct rc.pv from rc join months using (m) where rc.s <> 0) x),
   rws as (

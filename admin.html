@@ -923,7 +923,7 @@ const mi = d => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${d}"
 // Maktab sayti — bosma hujjatlardagi QR va manzil uchun BITTA manba (ilgari 3 joyda «iroacademy.uz» — mavjud bo'lmagan domen edi).
 const SITE_HOST='iqroacademy.uz', SITE_URL='https://'+SITE_HOST;
 // To'lov usuli -> yorliq (BITTA manba — ilgari 3 joyda nomuvofiq nusxada edi: ba'zisi 'grant'siz).
-const PROV_LBL = { click:'Click', uzum:'Uzum', cash:'Naqd', bank:'Bank', terminal:'Terminal', payme:'Payme', mixed:'Aralash', credit:'Avans', grant:'Grant', reattr:'↔ Avans ko‘chirish', offset:'O‘zaro hisob (ish haqidan)' };
+const PROV_LBL = { click:'Click', uzum:'Uzum', cash:'Naqd', bank:'Bank', terminal:'Terminal', payme:'Payme', mixed:'Aralash', fix:'Tuzatish', credit:'Avans', grant:'Grant', reattr:'↔ Avans ko‘chirish', offset:'O‘zaro hisob (ish haqidan)' };
 // ===== KASSA ASOSIDAGI pul tushumi (to'lov USULI va SANASI bo'yicha) =====
 //   Manba — payments qatorlari (har bir haqiqiy to'lov o'z usuli, summasi va vaqti bilan). Hisob-faktura
 //   «provider»i faqat OXIRGI to'lov usulini saqlaydi (aralash to'lovda — masalan 1 mln naqd + 1,9 mln Click —
@@ -2443,7 +2443,7 @@ function dashCoreStats(students, users){
 //   PROV_LBL dan (A6-08). Avval uch joyda alohida nusxa edi va o'zaro hisob ('offset' — maoshdan farzand to'lovi, kassa_offset) ularda
 //   yo'q edi: bosh sahifa va A4 da «offset» xom kaliti, «Moliya»da «Boshqa» bo'lib ko'rinardi («To'lovlar» va Telegram'da — to'g'ri).
 const DF_PMLAB=Object.assign({}, PROV_LBL, {'':'Boshqa'});
-const DF_PMCOL={click:'#236B5D',uzum:'#7C4DB8',cash:'#977322',bank:'#1F7A55',terminal:'#7A5C1F',payme:'#2E7CC0',mixed:'#B45309',credit:'#0891B2',offset:'#5B6B8C','':'#8A9691'};
+const DF_PMCOL={click:'#236B5D',uzum:'#7C4DB8',cash:'#977322',bank:'#1F7A55',terminal:'#7A5C1F',payme:'#2E7CC0',mixed:'#B45309',fix:'#6941C6',credit:'#0891B2',offset:'#5B6B8C','':'#8A9691'};
 // «Moliya» → «To'lov usuli» guruhi: rangi bor usul — o'zi, qolgani — «Boshqa».
 function finPmKey(k){ k=String(k==null?'':k); return Object.prototype.hasOwnProperty.call(DF_PMCOL,k)?k:''; }
 // Kassa hisoboti «Qaytarilgan (shu davrda)» (A6-06): faktura VA o'quvchi avansi ('credit') qaytarishlari — ikkalasida ham pul kassadan
@@ -11007,11 +11007,15 @@ async function renderMarketing(){
     </div></div>
     <div id="mk-body"><div class="card"><div class="loading">Yuklanmoqda…</div></div></div>`;
 
-  let LEADS=[], EXP=[], INV=[];
+  let LEADS=[], EXP=[], INV=[], MKS=null;
   let LTVC={ tenureYears:4, monthsPerYear:10 };   // LTV taxminlari (config/ltv'dan yuklanadi, admin tahrirlaydi)
   const reload=async()=>{
     // D6: marketing fakturalarni ko'rmaydi — faqat to'langan fakturalar o'rtachasi (marketing_fee_stats).
-    try{ let fs=null; [LEADS,EXP,fs]=await Promise.all([loadCol('enrollments'),loadCol('expenses'),rpc('marketing_fee_stats').catch(()=>null)]);
+    // RF-12 (moliya rejasi F2.9): «Buxgalteriya» qatorlarini ham o'qimaydi — «Marketing» / «Reklama» xarajati oylar bo'yicha yig'ma
+    //   (fin_marketing_spend: {"YYYY-MM": summa}). Funksiya yo'q (kassa modulisiz server) -> avvalgi yo'l (expenses o'qiladi).
+    try{ let fs=null, ms=null; [LEADS,ms,fs]=await Promise.all([loadCol('enrollments'),rpc('fin_marketing_spend').catch(e=>{ if(rpcMissing(e)) return null; throw e; }),rpc('marketing_fee_stats').catch(()=>null)]);
+      MKS=(ms && typeof ms==='object' && !Array.isArray(ms)) ? ms : null;
+      EXP=MKS ? [] : await loadCol('expenses');
       INV=(fs && Number(fs.paidCount)>0) ? [{ status:'paid', amount:Number(fs.avgPaid)||0 }] : []; return true; }
     catch(e){ $('#mk-body').innerHTML=`<div class="card"><div class="empty">Xatolik: ${esc(e.code||e.message)}</div></div>`; return false; }
   };
@@ -11031,7 +11035,7 @@ async function renderMarketing(){
     const avgFee=paidAmts.length?Math.round(paidAmts.reduce((a,b)=>a+b,0)/paidAmts.length):2900000;
 
     const perMonthQabul=k=>LEADS.filter(r=>lmonth(r)===k && stof(r)==='qabul').length;
-    const perMonthReklama=k=>sum(EXP.filter(e=>emonth(e)===k && (e.category==='Marketing'||e.category==='Reklama')));
+    const perMonthReklama=k=>MKS ? (Number(MKS[k])||0) : sum(EXP.filter(e=>emonth(e)===k && (e.category==='Marketing'||e.category==='Reklama')));
 
     const mLeads=LEADS.filter(r=>lmonth(r)===M);
     const nLeads=mLeads.length;
@@ -11412,9 +11416,10 @@ async function openPayHistory(sid, name){
     if(MONEY_MOVED.has(String(p.status||''))){ toast('Qo‘llangan to‘lovni «Bekor» qilib bo‘lmaydi — fakturani qayta hisoblang',true); return; }
     if(!confirm(`Bu to‘lov YOZUVI bekor qilinsinmi?\n${fmtSom(p.amount)} · ${pDay(p)} · ${provLbl[p.provider]||p.provider||''}\n\nBu faqat takror/xato (fantom) yozuv uchun (fakturaga tegmaydi).`)) return;
     b.disabled=true;
-    // FAQAT mavjud 'status' ustunini yozamiz (payments jadvalida canceledAt/By ustuni yo'q -> PGRST204).
-    try{ await setDoc(doc(db,'payments',pid),{ status:'canceled' },{merge:true});
-      toast('To‘lov yozuvi bekor qilindi ✓'); openPayHistory(sid, name); }
+    // F2.9 (RF-09): server funksiyasi (fin_pay_cancel — qulf ostida qayta tekshiradi, kim / qachon — server). Funksiya yo'q (kassa modulisiz
+    //   server) -> avvalgi yo'l: FAQAT mavjud 'status' ustuni (payments jadvalida canceledAt/By ustuni yo'q -> PGRST204).
+    try{ let r=null; try{ r=await rpc('fin_pay_cancel',{ p_id:String(pid) }); }catch(e){ if(!rpcMissing(e)) throw e; await setDoc(doc(db,'payments',pid),{ status:'canceled' },{merge:true}); }
+      toast(r&&r.dup?'Bu yozuv allaqachon bekor qilingan':'To‘lov yozuvi bekor qilindi ✓'); openPayHistory(sid, name); }
     catch(e){ b.disabled=false; toast('Xatolik: '+errMsg(e),true); }   // izohli rad etish (fin:locked …) — matni bilan
   });
 }
@@ -11524,9 +11529,9 @@ async function openFinanceAudit(){
     //   har xil kalit oladi va ikkalasi ham qo'llanadi; faqat AYNAN o'sha hodisaning retry'si to'qnashadi.
     //   (Oldin sana+summa edi -> belgilangan oylik summada ikkinchi to'lov noto'g'ri "dup" bo'lib qolardi.)
     const payId='fix_'+String(sid)+'_'+amt+'_'+paidTot;
-    // g8 (state-4): kassa ishga tushgach «naqd» kanal bilan balansga faqat kassa yo'llari qo'llaydi (server rad etadi) — bu yerda yangi pul
-    //   kirmaydi (mavjud to'lovlar fakturaga biriktiriladi), kanal yorlig'i «Aralash»
-    try{ const res=await applyPaymentClient(String(sid), amt, KASSA.live?'mixed':'cash', payId);
+    // Kanal — 'fix' («Tuzatish», moliya rejasi F2.9): bu yerda yangi pul kirmaydi (mavjud to'lovlar fakturaga biriktiriladi) — naqd ham,
+    //   «Aralash» ham emas: kassa moslik (P1) va naqd hisobotlari uni naqd tushum deb sanamaydi (avval kassa ishlamaganda 'cash' edi).
+    try{ const res=await applyPaymentClient(String(sid), amt, 'fix', payId);
       // dup -> AYNAN shu hodisa allaqachon qo'llangan: SUCCESS deb ko'rsatmaymiz (admin adashmasin).
       if(res && res.dup) toast('Bu summa allaqachon qo‘llangan (qayta qo‘llanmadi) — to‘lov tarixini tekshiring',true);
       else toast('Fakturaga qo‘llandi ✓');
@@ -12949,7 +12954,7 @@ async function renderPayments(){
         <button class="btn sm ghost2" data-hist="${esc(r.studentId||'')}" title="To‘lov / avans tarixi">📋</button>
         ${paidOf(r)>0&&!accRO()?`<button class="btn sm ghost2" data-receipt="${esc(r._id)}" title="Chek chop etish (80/58 mm)">🧾</button>`:''}
         ${r.status!=='paid'&&!isCanc(r)&&!accRO()?`<button class="btn sm gold" data-pay="${esc(r._id)}" title="To‘lov qabul qilish — Naqd / Bank / Terminal (qarz oldindan to‘ldiriladi)">💵 To‘lov</button>`:''}
-        ${((SESSION.isAdmin||SESSION.role==='finance_mgr'||SESSION.role==='treasurer') && r.status==='pending' && !finMonthLocked(r.month))?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
+        ${((SESSION.isAdmin||SESSION.role==='finance_mgr') && r.status==='pending' && !finMonthLocked(r.month))?`<button class="btn sm ghost2" data-cancel="${esc(r._id)}">Bekor</button>`:''}
         ${(SESSION.isAdmin && (r.status==='paid'||r.status==='partial') && paidOf(r)>0)?`<button class="btn sm ghost2" data-refund="${esc(r._id)}" title="To‘lovni qaytarish — summa + sabab + direktor paroli">↩ Qaytarish</button>`:''}
         ${(SESSION.isAdmin && !(r.status==='paid'||r.status==='partial') && !finMonthLocked(r.month))?`<button class="btn sm danger" data-del="${esc(r._id)}">O‘chir</button>`:''}
       </div></td></tr>`; };
@@ -13028,7 +13033,10 @@ async function renderPayments(){
     $('#pm-body').querySelectorAll('[data-mrdone]').forEach(b=>b.addEventListener('click',async()=>{ const p=manualRev.find(x=>x._id===b.dataset.mrdone); if(!p) return;
       if(!confirm('Bu qaytarilgan to‘lov bo‘yicha o‘quvchi balansi (avans/faktura) qo‘lda tuzatildimi?\n«OK» — ro‘yxatdan olib tashlanadi.')) return;
       b.disabled=true;
-      try{ await setDoc(doc(db,'payments',p._id), { raw:Object.assign({}, p.raw||{}, { manualReverseDone:true, manualReverseBy:(auth.currentUser&&auth.currentUser.email)||'', manualReverseAt:new Date().toISOString() }) }, {merge:true});
+      // F2.9 (RF-09): server funksiyasi (fin_pay_rev_done — kim / qachon server qo'yadi). Funksiya yo'q (kassa modulisiz server) -> avvalgi yo'l.
+      try{ try{ await rpc('fin_pay_rev_done',{ p_id:String(p._id) }); }
+        catch(e){ if(!rpcMissing(e)) throw e;
+          await setDoc(doc(db,'payments',p._id), { raw:Object.assign({}, p.raw||{}, { manualReverseDone:true, manualReverseBy:(auth.currentUser&&auth.currentUser.email)||'', manualReverseAt:new Date().toISOString() }) }, {merge:true}); }
         toast('Belgilandi ✓'); load(); }
       catch(e){ b.disabled=false; toast('Xatolik: '+errMsg(e),true); } }));
     $('#pm-body').querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>{ const rr=rows.find(x=>x._id===b.dataset.pay); if(!rr) return;

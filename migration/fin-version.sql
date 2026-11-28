@@ -100,8 +100,14 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          kassa_doc_json.filesN; avans hisoboti muddati sozlamasi (fin_org.extra.advDays, standart 3 ish kuni — app.kassa_adv_days) va
 --          muddati o'tgan avansi bor xodimga yangi avansni bloklash (extra.advBlock — app.kassa_adv_block, app.kassa_acc_late: so'rov va pul
 --          berishda kassa:adv_overdue); kassa_acc_card.advDays.
+--     26 — 2-bosqich F2.9 «Huquqlar II» (fin-guard.sql, zanjir oxirida): pul jadvallariga to'g'ridan-to'g'ri yozuv detektori
+--          (public.fin_direct_log, trg_fin_direct — app.fin_direct_detect / app.fin_direct_note) va qulfi (fin_org.extra.directGuard — «7 kun
+--          0 yozuv» sharti: app.fin_guard_check, fin_org_set; guardSince), barcha pul funksiyalariga «SET iqror.fin_rpc = '1'» bayrog'i;
+--          public.fin_pay_cancel («🚫 Bekor»), public.fin_pay_rev_done («✓ Bajarildi»), public.fin_guard_report, kassa_checks.direct
+--          (app.fin_guard_brief), public.fin_marketing_spend (RF-12; exp_sel — marketingsiz); RF-11 g'aznachi = kassa operatori
+--          (app.is_finance / app.is_cashier); credit_ledger cl_ins — faqat Direktor; fin_org.extra o'zgarishlar tarixida.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 25 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 26 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

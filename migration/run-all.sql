@@ -145,6 +145,9 @@ set local iqror.migrating = '1';
 \ir student-archive.sql
 \ir sheets-sync.sql
 \ir inv-parts.sql
+-- F2.9 (moliya rejasi «Huquqlar II»): pul jadvallariga to'g'ridan-to'g'ri yozuv detektori / qulfi va pul funksiyalari bayrog'i —
+--   zanjirning OXIRIDA (rls-* fayllaridan oldin): pul funksiyalarini qayta ta'riflaydigan barcha fayllardan keyin bayroq qo'yadi.
+--dev \ir fin-guard.sql
 -- YANGI migratsiyalar SHU QATORDAN YUQORIGA qo'shiladi: rls-timing.sql, rls-plpgsql.sql va rls-initplan.sql doim OXIRGI uch fayl (chain.sh tekshiradi).
 \ir rls-timing.sql
 \ir rls-plpgsql.sql

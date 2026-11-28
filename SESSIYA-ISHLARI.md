@@ -3858,6 +3858,67 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   (qog'oz cheklar baribir topshiriladi). Avans hisoboti muddati va bloklash — Direktor «⚙ Sozlamalar»da; bloklashni yoqish buxgalter bilan
   kelishiladi (Sh-8 B10, FD-14). Modul bilan birga (`--dev`) — keyingi deploy bilan.
 
+## 102) F2.9 «Huquqlar II» va F2.10 rollar matritsasi — to'g'ridan-to'g'ri yozuv detektori va qulfi, barcha pul funksiyalarida bayroq, g'aznachi = kassir, marketing — yig'ma (reliz 26) — 2026-11-28
+
+- **Egasi (2026-11-28):** «Davom eting» — rejaning F2.9 (RF-09…12: detektor → revoke; provider `fix`; barcha pul RPC larida bayroq;
+  `expenses` ga hujjatsiz to'g'ridan-to'g'ri yozuv kuzatiladi, keyin faqat «payroll__» qatori; qabul sharti — 7 kun 0 yozuv, keyin
+  revoke) va F2.10 (10 rol, buxgalter bilan, + anon REST RLS matritsasi; qabul sharti — barcha rad etishlar).
+- **Bayroq (`fin-guard.sql`, yangi, `--dev`; zanjirda rls-* fayllaridan oldin):** pul jadvallariga (payments, invoices, student_credit,
+  credit_ledger, expenses) yozadigan har SECURITY DEFINER funksiyaga `SET iqror.fin_rpc = '1'`. Ro'yxat qo'lda yuritilmaydi — fayl funksiya
+  matnidan topadi va har deployda qayta qo'yadi (oldingi fayl «create or replace» qilsa ham). Hozir 28 ta (7 ichki, 21 ochiq); kutilgan
+  ro'yxat sinovda — yangi pul funksiyasi qo'shilsa sinov uni ko'rsatadi.
+- **Detektor** (`trg_fin_direct` × 5, `app.fin_direct_detect` — SECURITY INVOKER: so'rov egasini ko'radi): bayroqsiz yozuv `fin_direct_log`
+  jurnaliga (faqat Direktor o'qiydi; yozuv id, ustun nomlari, rol — shaxsiy ma'lumotsiz). Manba: sahifa / PostgREST (`rest`), service_role
+  (`server`), API so'rovi ichidagi bayroqsiz definer funksiya (`rpc`). Istisno — to'lov serverining payments qatori (pulni bayroqli funksiyalar
+  qo'llaydi), «payroll__» xarajat qatori, toza yangi faktura (to'lanmagan yoki sababli 0 so'mlik), to'lanmagan fakturani o'chirish, faqat
+  to'lov bo'lmagan maydon yoki faqat «updatedAt»; deploy va psql kuzatilmaydi. Jurnalga yozish xatosi pul amalini to'xtatmaydi (WARNING);
+  yordamchi `app.fin_direct_note` faqat trigger ichidan ishlaydi.
+- **Qulf (revoke):** Direktor sozlamasi `fin_org.extra.directGuard` (`fin_org_set`, faqat true / false). Yoqish — detektor kamida 7 kun
+  ishlagan (`guardSince` — fayl birinchi o'rnatilgan kun) va oxirgi 7 kunda 0 yozuv bo'lsagina (`app.fin_guard_check`: `fin:guard_young` /
+  `fin:guard_dirty`). Yoqilganda bayroqsiz yozuv rad etiladi (42501, `fin:direct`, guruh bo'yicha aniq xabar; xarajatlarda faqat «payroll__»
+  qatori ochiq). Rejadagi «exp_ins / exp_upd / exp_del faqat payroll__» siyosat emas, trigger bilan qilindi: aniq xabar beradi, o'chirish —
+  darhol orqaga qaytarish (deploy kerak emas), o'zgarish `change_log` da. Pul funksiyalari va to'lov serveri qulf bilan o'zgarmaydi.
+- **Funksiyalar:** `fin_pay_cancel` («🚫 Bekor»: qo'llanmagan yozuv; qo'llangan / tasdiqlangan — rad, takror — dup; kim va qachon — server),
+  `fin_pay_rev_done` («✓ Bajarildi»: faqat qo'lda qaytarish ro'yxatidagi yozuv; kim — uid), `fin_guard_report` (Direktor: rejim, 7 kunlik
+  son, yopish mumkinligi va sanasi, guruhlar, oxirgi 50 yozuv — kim bilan), `app.fin_guard_brief` (nazorat ro'yxati uchun: rejim, son,
+  yopish mumkinligi), `fin_marketing_spend` (RF-12: «Marketing» / «Reklama» xarajati oylar bo'yicha).
+- **Huquqlar:** RF-11 — `app.is_finance()` = Direktor va Moliya menejeri, `app.is_cashier()` = kassir va g'aznachi (g'aznachida faktura
+  yaratish / bekor qilish, xarajat, avans qo'shish, qaytarish — endi yo'q); RF-12 — `exp_sel` dan marketing chiqdi; RF-10 — `credit_ledger`
+  ga qo'shish faqat Direktor (`cl_ins`; MM chiqdi — sahifada bunday yozuv yo'q). `fin-core.sql` (`fin_org_set`: `directGuard` kaliti,
+  yoqishda `fin_guard_check`), `kassa-day.sql` (`kassa_checks.direct` — faqat Direktorga), `sheets-sync.sql` (usul `fix` — «Tuzatish»).
+- **Sahifa:** «🚫 Bekor» va «✓ Bajarildi» — funksiya orqali (kassa modulisiz serverda — avvalgi yo'l); «Moliya tekshiruvi» → «Qo'llash» —
+  kanal `fix` (avval kassa ishlamaganda `cash` edi — naqd tushum deb sanalardi; tarix va diagrammada «Tuzatish»); marketing sahifasi —
+  `fin_marketing_spend` (xarajat qatorlari yuklanmaydi); g'aznachida faktura «Bekor» tugmasi yo'q. «Kassa» → nazorat ro'yxati (Direktor):
+  «To'g'ridan-to'g'ri yozuvlar (pul jadvallari)» qatori — yozuv bor: «diqqat» (soni); 7 kun yozuvsiz va qulf o'chiq: «ma'lumot» («⚙
+  Sozlamalar»da yopish mumkin); detektor yangi yoki qulf yoqiq: «joyida». «⚙ Sozlamalar»da detektor bloki: holat, 30 kunlik ro'yxat (sana,
+  nima, qaysi yozuv, manba, kim), qulf belgisi (shart bajarilmaguncha o'chiq, sanasi bilan), yoqish va o'chirishda tasdiq oynasi.
+- **Reliz 26:** `fin-version`, `SERVER_VER`, `kassa-checks` (moliya jadvallari 23, ochiq funksiyalar 66, ichki 144, triggerlar 40, RLS
+  siyosatlari 22, barmoq izlari 422; 5-band ro'yxatida `fin_direct_note`, 8-bandda `trg_fin_direct` × 5), `test-kassa-checks` (A0).
+- **Sinovlar:** yangi `test-fin-guard.sql` (44: bayroq ro'yxati, detektor — har guruh, manba va istisno, qulf sharti va rad etish, «Bekor» /
+  «Bajarildi», RF-10/11/12, hisobot va nazorat ro'yxati, «Qo'llash» `fix`) va `test-rls-matrix.sql` (46, F2.10: 14 rol — Direktor, Moliya
+  menejeri, buxgalter, kassir, g'aznachi, HR, O'IBDO', marketing, qabulxona, o'qituvchi, ota-ona, hamshira, sotuvchi, ma'muriyat rahbari —
+  va anon × 40 ta pul / kassa jadvali va `*_acc` ko'rinishi × SELECT / INSERT / UPDATE / DELETE; triggerlarsiz — faqat RLS va GRANT; kutilgan
+  matritsa muzlatilgan, har farq va ro'yxatda yo'q yangi moliya jadvali — FAIL; qo'shimcha: anon va marketing — hech narsa, g'aznachi =
+  kassir, yozuv faqat Direktor / MM / kassir / g'aznachi / HR, ota-ona — faqat o'z farzandi). Moslangan: `test-audit-11-moliya` (K04b —
+  g'aznachi endi moliya huquqisiz; jonli zanjirda — avvalgidek), `test-fin-exp` (G2 — marketing xarajat qatorini ko'rmaydi, yig'ma ochiq),
+  `test-fin-lock` (C1 — Direktor), `test-sales-role` (urug'ida jurnal qatori). Mutatsiya 52/52 (detektor, qulf, funksiyalar, siyosatlar,
+  matritsa); node `fin-kassa` 51 (nazorat qatori, sozlamalar bloki — ekranlangan); brauzer — yangi `k28` (22), `k4` (nazorat ro'yxati 35
+  qator); `run-all.sh` har dev qatoriga `direct=N` qo'shadi — ssenariylar davomida sahifa pul jadvaliga to'g'ridan-to'g'ri yozmasligi ham
+  tekshiriladi (0 dan katta — qator muammoli).
+- **Natija:** to'liq regressiya yakuniy kod ustida (dev zanjir va qayta zanjir, poyga 78/78, jonli zanjir va qayta zanjir,
+  barcha node va server sinovlari) — hammasi yashil (`test-fin-guard` 44/44, `test-rls-matrix` 46/46, `test-kassa-checks` 55/55,
+  `test-fin-rights` 125/125, `test-audit-11-moliya` 44/44 dev va 42/42 jonli, `test-sales-role` 121/121). Birinchi to'liq o'tishda dev
+  zanjirda 4 ta farq chiqdi — huquqlar ataylab o'zgargani uchun (g'aznachi, marketing, `credit_ledger`, jurnal urug'i): sinovlar moslandi.
+  Brauzer to'plami — 35 o'tish, 844 tekshiruv: 34 tasi o'tdi, `k4` dagi eskirgan kutilma (nazorat ro'yxati 35 qator) tuzatildi; nazorat
+  qatori darajasi aniqlashtirilgach (`fin_guard_brief.canEnforce`, +2 mutatsiya — ikkalasi ushlandi) `k4` va `k28` qayta o'tkazildi —
+  38/38, 22/22; barcha dev qatorlarda `direct=0`.
+- **Kuzatuv (o'zgartirilmadi):** O'IBDO' xarajatlarni (maosh qatorlari bilan), fakturalarni va avansni, qabulxona fakturalarni o'qiydi —
+  oldingi qarorlar; matritsada muzlatilgan (toraytirish — egasi qarori bilan, matritsa ham shu bilan yangilanadi).
+- **Egasi va Direktor uchun:** deploydan keyin detektor faqat kuzatadi (hech narsa yopilmaydi). Nazorat ro'yxatidagi yangi qator yozuv
+  ko'rsatsa — «⚙ Sozlamalar»dagi ro'yxatni dasturchiga yuboring. Birinchi kassa haftasidan keyin, 7 kun yozuvsiz bo'lsa — qulfni «⚙
+  Sozlamalar»da yoqing; muammo chiqsa — o'chirish darhol orqaga qaytaradi (`ishga-tushirish.md` 10-bo'lim, `yoriqnomalar.md` 3-bo'lim).
+  «G'aznachi» roli endi kassir bilan teng; marketing faqat oylik jamini ko'radi. Modul bilan birga (`--dev`) — keyingi deploy bilan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

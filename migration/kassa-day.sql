@@ -2507,9 +2507,14 @@ language plpgsql stable security definer set search_path = public, app, pg_temp 
 declare
   v_desk text := coalesce(nullif(btrim(coalesce(p_desk, '')), ''), 'main'); v_today date := app.fin_today(); v_limit numeric; v_bal numeric;
   v_test boolean; v_m0 date := date_trunc('month', app.fin_today())::date; v_first date; v_skip tstzrange[]; v_restarts jsonb := '[]'::jsonb;
+  v_direct jsonb;
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   v_test := coalesce((select k."isTest" from public.cash_desks k where k.id = v_desk), false);
+  -- F2.9: pul jadvallariga to'g'ridan-to'g'ri yozuv detektori (rejim, oxirgi 7 kundagi yozuvlar) — faqat Direktorga (fin-guard.sql)
+  if app.is_admin() and to_regprocedure('app.fin_guard_brief()') is not null then
+    execute 'select app.fin_guard_brief()' into v_direct;
+  end if;
   select o."cashLimit" into v_limit from public.fin_org o where o.id = 'main';
   v_bal := coalesce(app.kassa_desk_balance(v_desk), 0);
   -- birinchi ishga tushgan kun (app.kassa_periods; kassa to'xtatilib qayta ishga tushirilgan bo'lsa ham — birinchisi)
@@ -2731,7 +2736,7 @@ begin
                                            'lastDay', (select max(d.day) from public.cash_days d where d.desk = k.id))
                    from public.cash_desks k where k.id = v_desk and k."pausedAt" is not null) end,
     --   Oxirgi 400 kundagi qayta ishga tushirishlar (yuqorida hisoblangan: «rows», «backdated», izohlanmagan farq).
-    'restarts', v_restarts);
+    'restarts', v_restarts) || jsonb_build_object('direct', v_direct);
 end $$;
 revoke all on function public.kassa_checks(text) from public, anon;
 grant execute on function public.kassa_checks(text) to authenticated;

@@ -202,6 +202,9 @@ end $$;
 --   advDays / advBlock (extra; F2.6b, FD-14): avans hisoboti muddati — maktab ish kunlarida (1–30; kalit yo'q — 3) va muddati o'tgan
 --   yopilmagan avansi bor xodimga yangi «Hisobdorga avans»ni bloklash (true — so'rov ham, pul berish ham rad; kalit yo'q — false,
 --   faqat ogohlantirish). Qo'llanishi — kassa-docs.sql: app.kassa_adv_days, app.kassa_adv_block.
+--   directGuard (extra; F2.9, «Huquqlar II»): pul jadvallariga to'g'ridan-to'g'ri yozuv QULFI (true — detektor yozuvni rad etadi;
+--   false / kalit yo'q — faqat jurnalga yozadi). Yoqish — «7 kun 0 yozuv» sharti bilan (fin-guard.sql: app.fin_guard_check);
+--   o'chirish (orqaga qaytarish) — doim. guardSince (extra) — detektor o'rnatilgan kun, faqat fin-guard.sql qo'yadi.
 --   kassaGoLive o'zgarsa — kassa-day.sql: app.kassa_golive_guard (modulning shu qismi o'rnatilgan bo'lsa): ishlagan kassada kelgan sanani
 --   bo'shatish / surish — kassani TO'XTATISH (ochiq kun va pul berilmagan so'rovlar bo'lmasa; sana bo'sh saqlanadi), to'xtatilgan kassada —
 --   faqat qayta ishga tushirish kuniga (ishga-tushirish §9; ui-5). O'zgarish kun jurnaliga yoziladi.
@@ -238,6 +241,8 @@ begin
       end if;
     elsif k = 'advBlock' then
       if jsonb_typeof(p -> k) is distinct from 'boolean' then raise exception 'fin_org_set: advBlock — true yoki false' using errcode = '22023'; end if;
+    elsif k = 'directGuard' then
+      if jsonb_typeof(p -> k) is distinct from 'boolean' then raise exception 'fin_org_set: directGuard — true yoki false' using errcode = '22023'; end if;
     else
       raise exception 'fin_org_set: noma''lum maydon %', k using errcode = '22023';
     end if;
@@ -247,6 +252,13 @@ begin
     if v_new is distinct from r."kassaGoLive" and to_regprocedure('app.kassa_golive_guard(date,date)') is not null then
       execute 'select app.kassa_golive_guard($1, $2)' into v_new using r."kassaGoLive", v_new;
     end if;
+  end if;
+  -- Qulfni yoqish (o'chiq holatdan) — «7 kun 0 yozuv» sharti (fin-guard.sql: app.fin_guard_check); o'chirish — doim mumkin.
+  if p ? 'directGuard' and (p ->> 'directGuard')::boolean and coalesce(r.extra ->> 'directGuard', '') <> 'true' then
+    if to_regprocedure('app.fin_guard_check()') is null then
+      raise exception 'fin_org_set: to''g''ridan-to''g''ri yozuv detektori o''rnatilmagan' using errcode = 'P0001', hint = 'fin:guard_missing';
+    end if;
+    execute 'select app.fin_guard_check()';
   end if;
   update public.fin_org set
     "nameUz"      = case when p ? 'nameUz' then coalesce(p ->> 'nameUz', '') else "nameUz" end,
@@ -264,7 +276,8 @@ begin
                     || case when p ? 'depositDays' then jsonb_build_object('depositDays', (select coalesce(jsonb_agg((x #>> '{}')::int order by (x #>> '{}')::int), '[]'::jsonb)
                                                                                              from jsonb_array_elements(p -> 'depositDays') x)) else '{}'::jsonb end
                     || case when p ? 'advDays' then jsonb_build_object('advDays', (p ->> 'advDays')::int) else '{}'::jsonb end
-                    || case when p ? 'advBlock' then jsonb_build_object('advBlock', (p ->> 'advBlock')::boolean) else '{}'::jsonb end,
+                    || case when p ? 'advBlock' then jsonb_build_object('advBlock', (p ->> 'advBlock')::boolean) else '{}'::jsonb end
+                    || case when p ? 'directGuard' then jsonb_build_object('directGuard', (p ->> 'directGuard')::boolean) else '{}'::jsonb end,
     "updatedAt"   = now(), "updatedBy" = app.uid()
   where id = 'main';
   -- Ishga tushadigan kun bugungi yoki o'tgan kunga qo'yilsa: shu kundan beri kassa orderisiz naqd yozuv (o'quv to'lovi, xarajat,

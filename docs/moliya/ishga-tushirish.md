@@ -159,8 +159,8 @@ Keyin, hali hech narsa kiritmasdan:
   avvalgidek orderisiz; bank; korporativ karta), statiya qatorlari (eski toifa statiyadan o‘zi qo‘yiladi), bank o‘tkazmasida kontragent
   va to‘lov topshiriqnomasi № majburiy, ilova va izoh. Eski yozuvlar — «Tuzatish» (hujjat bilan qayta yoziladi) va «Bekor» (sabab
   bilan); oylik maosh hisobi qatori — avvalgidek. Moliya menejeri va Direktorga birinchi kunda qisqa ko‘rsatiladi (statiya tanlash,
-  kontragent qo‘shish). Keshdagi eski sahifa ham ishlaydi (hujjatsiz to‘g‘ridan-to‘g‘ri yozish huquqi — F2.9 da, detektor haftasidan
-  keyin olinadi); sahifa yangilanganda hujjat oynasi ochiladi.
+  kontragent qo‘shish). Keshdagi eski sahifa ham ishlaydi (hujjatsiz to‘g‘ridan-to‘g‘ri yozuvni F2.9 detektori qayd qiladi; Direktor qulfni
+  yoqqach — 10-bo‘lim — eski sahifa xarajat yozolmaydi, xabar chiqadi); sahifa yangilanganda hujjat oynasi ochiladi.
 - «Buxgalteriya» → «🏢 Kontragentlar» (F2.2, modul relizi 14+; Direktor, Moliya menejeri, buxgalter) — kontragentlar ro‘yxati (qidiruv,
   tur va holat bo‘yicha), karta: STIR (9 raqam), bank hisob raqami (20 raqam) va MFO kodi (5 raqam), bank nomi, shartnoma (raqami,
   sanasi, amal qilish muddati); «Ko‘chirma» (RP-10) — kontragent bilan barcha to‘lovlar (kassa orderlari, bank va karta), davr jamlari,
@@ -470,3 +470,7 @@ Har kuni kassa yopilgach 15 daqiqalik qo‘ng‘iroq (kassir, moliya menejeri, n
 to‘xtatadigan xato — o‘sha kuni (tuzalmasa — «Қ» blankalari); noqulaylik — 2 ish kuni; istak — keyingi yangilanish. Har hafta (dushanba) —
 nazorat ro‘yxati, «Kassa» → «KPI» (haftalik ko‘rsatkichlar; dushanba kungi Telegram hisobotida ham), `kassa-checks.sql` va
 `verify-db.sh` natijasi ko‘rib chiqiladi (ikkalasi faqat o‘qiydi).
+To‘g‘ridan-to‘g‘ri yozuvlar qulfi (F2.9): detektor modul o‘rnatilgan kundan ishlaydi; nazorat ro‘yxatidagi «To‘g‘ridan-to‘g‘ri
+yozuvlar (pul jadvallari)» qatori har hafta ko‘riladi. Yozuv chiqsa — ro‘yxat («⚙ Sozlamalar») dasturchiga yuboriladi, manba tuzatiladi.
+Birinchi kassa haftasidan keyin, qator 7 kun yozuvsiz bo‘lsa («⚙ Sozlamalar»da «Yopish mumkin») — Direktor qulfni yoqadi (yil yakuni
+kunlarida — 30-dekabr, 4-yanvar — emas). Orqaga qaytarish — o‘sha belgini o‘chirish (darhol, deploy kerak emas).

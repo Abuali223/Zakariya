@@ -212,6 +212,7 @@ declare r record; col record; v_cols text[]; v_vals text[]; v_sql text; v_n int;
     "cash_prints": {"kind": "doc", "mode": "original", "docId": "zz_doc"}, "discount_requests": {"kind": "none", "status": "pending"},
     "enrollment_events": {"type": "note"}, "fin_counterparties": {"kind": "other", "name": "Sinov Hamkor"},
     "fin_exp_docs": {"origin": "legacy", "status": "void", "voidReason": "zz", "voidedAt": "2026-11-02 10:00:00+05"},
+    "fin_direct_log": {"grp": "payments", "op": "UPDATE", "via": "rest"},
     "invoices": {"month": "2026-11"}, "nurse_visits": {"action": "rest"}, "payroll_runs": {"id": "2026-10", "status": "draft"},
     "staff_leaves": {"startDay": "2026-11-02", "endDay": "2026-11-03", "type": "ruhsat"}, "public_names_backup": {"name": "Sinov Zaxira"}
   }'::jsonb;

@@ -149,8 +149,8 @@ select zz.chk('I12 yopilgan oy fakturasining faqat summasi (Direktor, to''g''rid
   '^ERR 42501 \[fin:locked\] Hisob-faktura \(2026-12 oyi\).* \| ERR 42501 \[fin:locked\] Hisob-faktura \(2026-12 oyi\).* \| 2026-12:1000000:400000:partial$');
 
 -- ---------- (C) avans (kredit) harakatlari ----------
-select zz.chk('C1 foydalanuvchi orqa sana bilan yozgan avans harakati — sanasi server vaqtiga (05.01.2027) almashadi',
-  zz.as('U_FM', $q$insert into public.credit_ledger (id, "studentId", "studentName", delta, "balanceAfter", reason, note, "at") values ('cl_x', 'T-2', 'Sinov B', 5000, 5000, 'manual', 'orqa sana', '2026-12-20 10:00+05') returning to_char("at" at time zone 'Asia/Tashkent', 'YYYY-MM-DD')$q$),
+select zz.chk('C1 foydalanuvchi (Direktor — to''g''ridan-to''g''ri qo''shish faqat unda, F2.9) orqa sana bilan yozgan avans harakati — sanasi server vaqtiga (05.01.2027) almashadi',
+  zz.as('U_DIR', $q$insert into public.credit_ledger (id, "studentId", "studentName", delta, "balanceAfter", reason, note, "at") values ('cl_x', 'T-2', 'Sinov B', 5000, 5000, 'manual', 'orqa sana', '2026-12-20 10:00+05') returning to_char("at" at time zone 'Asia/Tashkent', 'YYYY-MM-DD')$q$),
   '^2027-01-05$');
 select zz.chk('C2 yopilgan davr avans harakatini o''zgartirish — rad; C3 o''chirish — rad',
   zz.asu('U_DIR', $q$with u as (update public.credit_ledger set delta = 1 where id = 'cl_d' returning 1) select count(*)::text from u$q$) || ' | '

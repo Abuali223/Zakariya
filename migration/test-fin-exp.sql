@@ -361,8 +361,9 @@ select zz.chk('G1 hujjatlarni Direktor, Moliya menejeri, buxgalter va kassir o''
   (select string_agg(zz.as(u, $q$select count(*)::text from public.fin_exp_docs$q$), ',' order by u) from unnest(array['U_ACC', 'U_DIR', 'U_FM', 'U_KAS', 'U_MKT', 'U_TCH']) u)
   || ' | ' || zz.as(null, $q$select count(*)::text from public.fin_exp_docs$q$),
   '^([1-9][0-9]*),\1,\1,\1,0,0 \| ERR 42501');
-select zz.chk('G2 marketolog «Buxgalteriya» qatorlarini avvalgidek ko''radi (reklama xarajati hisobi uchun)',
-  zz.as('U_MKT', $q$select (count(*) > 0)::text from public.expenses$q$), '^true$');
+select zz.chk('G2 marketolog «Buxgalteriya» qatorlarini ko''rmaydi (F2.9, RF-12) — reklama xarajati yig''ma funksiyadan (fin_marketing_spend)',
+  zz.as('U_MKT', $q$select (count(*) > 0)::text from public.expenses$q$) || ' | '
+  || zz.as('U_MKT', $q$select jsonb_typeof(public.fin_marketing_spend())$q$), '^false \| object$');
 select zz.chk('G3 o''zgarishlar jurnali: hujjat (kiritildi, bekor qilindi) va xarajat qatori (usul, statiya, hujjat bilan)',
   (select count(*) from public.change_log where tbl = 'fin_exp_docs' and row_id = zz.get('B1id') and op in ('INSERT', 'UPDATE')) || ' | '
   || (select string_agg(k, ',' order by k) from public.change_log c, jsonb_object_keys(c.changes) k where c.tbl = 'expenses' and c.row_id = zz.get('Fd') || '_1' and c.op = 'INSERT'),
