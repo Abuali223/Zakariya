@@ -315,10 +315,25 @@ terminal, bank, o‘zaro hisob; «Buxgalteriya» xarajatlari; qaytarishlar; maos
 Hisobdor xarajatlari (avans hisoboti — pul oldin avans sifatida berilgan) va hisoblangan maosh (tasdiqlangan vedomost × lavozim →
 EX-01…EX-04) — alohida, pul jamiga kirmaydi; ichki o‘tkazma (bankka topshirish, bankdan olish, korporativ karta) — belgili, sof oqimga
 kirmaydi. Yashil belgilar: «Jami = Σ hujjatlar» (har manba jami matritsa jamiga teng) va «kassa orderlari»; «≈ toifadan» — statiya eski
-xarajat toifasidan olingan (yozuvda statiya yo‘q); «statiyasiz toifalar» — shu xarajatlarga statiya tanlab qayta saqlang. «Maosh
+xarajat toifasidan olingan (yozuvda statiya yo‘q; noyabr–yanvarda — statiya buxgalter tasnifida hali tasdiqlanmagan, quyida); «statiyasiz
+toifalar» — shu xarajatlarga statiya tanlab qayta saqlang. «Maosh
 taqsimoti»: tasdiqlangan oyda taqsimot «Maosh» qatori bilan teng bo‘lishi kerak (farq bo‘lsa yoki qator yozilmagan bo‘lsa — «💼 Oylik
 maoshni yozish»); «aniqlanmagan» lavozim statiyasi buxgalter bilan kelishiladi (Sh-8, B22). «⬇ Excel (XLSX)» — to‘rt varaq: Matritsa,
 Usullar, Maosh taqsimoti, Nazorat; faylda ism yo‘q.
+
+**Noyabr–yanvar eski xarajatlari — statiya tasnifi va imzo (F2.3).** Kassa moduli ishga tushgunga qadar «Buxgalteriya»ga kiritilgan
+xarajatlarning (2026-yil noyabr — 2027-yil yanvar; hujjatsiz va kassa orderisiz yozuvlar) statiyasi eski toifadan taxminan olingan.
+«Buxgalteriya» → **«🏷 Statiya tasnifi»**: oy tugmasi (yonida — tasdiqlangan / jami), oy yig‘masi (jami, «Boshqa» (EX-49) ulushi —
+maqsad ≤ 2 %, statiyalar bo‘yicha). Har yozuvda statiyani tanlang (toifadagisi to‘g‘ri bo‘lsa — yozuvni belgilang, shu statiya
+tasdiqlanadi) va kerak bo‘lsa tasnif izohini yozing («Boshqa» — izoh majburiy, kamida 3 belgi); bir xil statiyali ko‘p yozuv —
+belgilab, yuqoridagi ro‘yxatdan statiya → «Belgilanganlarga qo‘yish» → **«✓ Saqlash»**. Summa, sana, toifa va izoh o‘zgarmaydi; har
+tasnif jurnalga yoziladi (kim, qachon, eski → yangi statiya). Bitta yozuvni bir nechta statiyaga bo‘lish kerak bo‘lsa — Moliya
+menejeri «Tuzatish» bilan hujjat qatorlariga ajratadi (eski yozuv o‘rniga hujjat yoziladi va tasnif ro‘yxatidan chiqadi). Oyning
+hamma yozuvi «✓ tasdiqlangan» bo‘lgach — **«✍ Imzolash»** (faqat buxgalter). Imzodan keyin oyning statiyasi, yozuvlar soni yoki jami
+o‘zgarsa — holat «imzo eskirgan»: o‘zgarishni tekshirib, qayta imzolang. Yopilgan davr yozuvlari o‘zgarmaydi (kerak bo‘lsa Direktor
+davrni qayta ochadi) — shuning uchun noyabr–dekabrni dekabr davri yopilguncha, yanvarni yanvar yopilguncha tasniflab imzolang.
+RP-09 da shu oylarning tasdiqlanmagan yozuvlari «≈» bilan, «Eski xarajatlar statiyasi (noyabr–yanvar)» qatorida — oy holati
+(«qisman: N tadan M tasi tasdiqlangan» / «imzo kutilmoqda» / «imzolangan» / «imzo eskirgan»); XLSX «Nazorat» varag‘ida ham.
 
 Kassa to‘xtatilib qayta ishga tushirilgan oyda KO-3 va «Statiyalar»da **«Qayta ishga tushirish farqi»** qatori bor:
 davr boshi + kirim − chiqim + farq = davr oxiri. Farq — texnik «Д-» dalolatnoma (to‘xtatilgan davrdagi naqd harakat; kassa
@@ -435,6 +450,7 @@ Click / Uzum to‘lovida ishlayveradi, kabinetga farzand qo‘shishda — yo‘q
 | Kassani to‘xtatish (orqaga qaytish) | «⚙ Sozlamalar» → «Kassa ishga tushadigan kun»ni bo‘shatish yoki keyinga surish | oldin qurilmalar navbati bo‘shagan, kutilayotgan smena topshirish qabul qilingan yoki bekor qilingan, kun yopilgan, so‘rovlar bajarilgan yoki bekor qilingan bo‘lsin (aks holda tizim rad etib, ro‘yxatini ko‘rsatadi) — tayyorlangan, hali boshlanmagan qayta ishga tushirishda sanani bo‘shatganda ham; shu payt birinchi hujjat yozilayotgan bo‘lsa — «hozir hujjat yozilmoqda», bir oz kutib qayta saqlang; oxirgi kun «hali o‘tkazilmagan yozuvlar» bilan yopilgan va ular hali kelmagan bo‘lsa — kunni qayta oching, navbat o‘tgach qayta yoping (kun tekshirilgan bo‘lsa — navbat tushgan keyingi kunni yoping); hali kiritilmagan «Қ» blankalari bilan yopilgan bo‘lsa — «Қ» yozuvlari kiritilib, ular tushgan yangi kun yopiladi; oyna oqibatlarini sanab tasdiq so‘raydi; hodisa jurnalga yoziladi (`ishga-tushirish.md`, 9-bo‘lim) |
 | Kassani qayta ishga tushirish | «Kassa» → «Qayta ishga tushirish» (komissiya sanagan summa, kun), keyin «⚙ Sozlamalar»da ishga tushadigan kun = o‘sha kun | farq (to‘xtatilgan davrdagi naqd harakat) texnik «Д-» dalolatnoma bilan yoziladi — kamomad / ortiqcha emas; nazorat ro‘yxatida «Kassani to‘xtatish va qayta ishga tushirish»; sanashdan keyin kassa hujjatisiz naqd yozuv kiritilsa — qayta sanash (tizim birinchi kunni ochmaydi, «Kassa»da qizil ogohlantirish) |
 | Davr surati va davrni yopish / qayta ochish | «Davr» | yopish — shu sanagacha kassa kunlari yopilgach; qayta ochish — sababi bilan, tarixda qoladi (yopilgan davr to‘lovini qaytarish, biriktirish yoki holatini o‘zgartirish uchun ham — amaldan keyin qayta yopiladi) |
+| Noyabr–yanvar eski xarajatlari statiyasi (F2.3) | «Buxgalteriya» → «🏷 Statiya tasnifi» | ko‘rish va tasnif — siz ham; oy imzosi — faqat buxgalter; yopilgan davr yozuvini tasniflash uchun davr qayta ochiladi (keyin qayta yopiladi); imzolangan oy o‘zgarsa — imzo «eskirgan», buxgalter qayta imzolaydi |
 | Naqd pulni o‘quvchi balansiga qo‘llash (kassa ishga tushgach) | faqat «💵 To‘lov» | to‘lov yozuvini to‘g‘ridan-to‘g‘ri kiritish, «naqd» kanal bilan qo‘llash yoki bo‘lishda «naqd» qism — Direktorga ham yo‘q (kirim orderisiz bo‘lardi); «Moliya tekshiruvi» → «Qo‘llash» (osilib qolgan mavjud pul, yangi pul kirmaydi) kanal yorlig‘i «Aralash» bilan ishlaydi |
 | Oldingi avansi hisobotsiz xodimga yangi avans (istisno) | «So‘rovlar» → «Tasdiqlash» | kassa tartibidan istisno; so‘rovda «Direktor tasdig‘i» talabi o‘zi qo‘yiladi |
 | Moliya menejeri yoki buxgalterga beriladigan pul (avans, hisobdorga avans) | «So‘rovlar» → «Tasdiqlash» | ular o‘zlariga beriladigan pulni tasdiqlay olmaydi — 2-ro‘yxat bosqichini Direktor imzolaydi (boshqa 2-ro‘yxat xodimi ham tasdiqlay oladi); Direktor tasdig‘i ham kerak bo‘lsa — o‘sha bir tasdiq bilan |

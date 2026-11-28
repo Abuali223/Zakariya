@@ -141,7 +141,7 @@ grant execute on function zz.bad_inv(text), zz.bad_pay(text) to authenticated, s
 select zz.reset();
 
 -- ---------- (F) bayroq ----------
-select zz.chk('F1 bayroqli funksiyalar — kutilgan ro''yxat (28: pul jadvallariga yozadigan barcha definer funksiyalar + 2 yangi)',
+select zz.chk('F1 bayroqli funksiyalar — kutilgan ro''yxat (29: pul jadvallariga yozadigan barcha definer funksiyalar, F2.9 ning 2 ta va F2.3 ning fin_exp_classify)',
   (select string_agg(n.nspname || '.' || p.proname || '(' || oidvectortypes(p.proargtypes) || ')', ';' order by n.nspname, p.proname, oidvectortypes(p.proargtypes))
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c = 'iqror.fin_rpc=1')),
@@ -149,7 +149,7 @@ select zz.chk('F1 bayroqli funksiyalar — kutilgan ro''yxat (28: pul jadvallari
     || 'app.kassa_link_void(text, text, text);app.kassa_tuition_post(text, numeric, text, timestamp with time zone, jsonb, jsonb, boolean);'
     || 'app.reprice_invoice_core(text, numeric, jsonb, boolean);app.tuition_reverse_core(text, text, text);public.add_credit(text, numeric, text, text, text);'
     || 'public.adjust_credit(text, numeric, text, text);public.apply_payment(text, numeric, text, text);public.apply_to_invoice(text, numeric, text, text);'
-    || 'public.assign_payment(text, text);public.cancel_invoice(text);public.delete_unpaid_invoice(text);public.fin_exp_save(jsonb);public.fin_exp_void(text, text);'
+    || 'public.assign_payment(text, text);public.cancel_invoice(text);public.delete_unpaid_invoice(text);public.fin_exp_classify(jsonb);public.fin_exp_save(jsonb);public.fin_exp_void(text, text);'
     || 'public.fin_pay_cancel(text);public.fin_pay_rev_done(text);public.fin_refund_credit(jsonb);public.kassa_adv_report_void(text, text);'
     || 'public.kassa_fix_decide(text, boolean, text);public.kassa_offset(jsonb);public.reattribute_avans(text, text, numeric, text, text);'
     || 'public.record_manual_payment(text, text, numeric, text, text, text, text, text, timestamp with time zone, jsonb);'

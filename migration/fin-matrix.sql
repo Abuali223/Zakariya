@@ -21,6 +21,7 @@ do $iqror_guard$ begin raise exception 'iqror: fin-matrix.sql ALOHIDA ishga tush
 --     xarajatlar — «Buxgalteriya» reyestri: bank, karta, kassagacha naqd, eski yozuv (usuli yo'q — «boshqa») va hisobdor orqali
 --                (avans hisoboti, «Д-» dalolatnoma — pul oldin OP-06 bilan kassadan chiqqan: bu ustun — sarflangan pulning statiyasi,
 --                pul jamiga qo'shilmaydi); statiya — yozuvdagi, yo'q bo'lsa eski toifadan (fin_category_map — «taxminiy» belgisi);
+--                F2.3 (fin-class.sql): noyabr–yanvar eski yozuvlari — buxgalter tasdiqlaguncha «taxminiy», oylar holati — «classify»;
 --     qaytarishlar — o'quv to'lovi / avans (OP-15) va biriktirilmagan to'lov (OP-16), kassa orderisizlari (bank, karta, eski yozuv);
 --     maosh (OP-09) va avans (OP-08) to'lovlari — kassa orderisizlari (karta, o'zaro hisob, kassagacha naqd); maosh summasi — berilgan
 --                (paid; eski yozuvda — net + o'rinbosarlik, salary-carryover.sql qoidasi); oy — to'lov sanasi;
@@ -104,7 +105,12 @@ begin
     -- «Buxgalteriya» reyestri (kassa orderidan ko'chirilganidan tashqari; maosh hisoblash qatori — pastda)
     select 'expenses', 'out', coalesce(nullif(e."articleId", ''), cm."articleId", ''),
            case when e.method in ('bank', 'card', 'cash', 'accountable') then e.method else 'other' end,
-           coalesce(nullif(e.month, ''), left(e.date, 7)), e.amount, nullif(e."articleId", '') is null and cm."articleId" is not null,
+           coalesce(nullif(e.month, ''), left(e.date, 7)), e.amount,
+           -- taxminiy: F2.3 tasnif davridagi eski yozuv — buxgalter tasdiqlamagan (fin-class.sql); boshqa oylarda — statiya toifadan olingan
+           case when app.fin_class_in(e.kind, e."expDocId", e."cashDocId", e.month, e.date)
+                then coalesce(nullif(e."articleId", ''), cm."articleId") is not null
+                     and not app.fin_class_ok(e.id, coalesce(nullif(e."articleId", ''), cm."articleId"))
+                else nullif(e."articleId", '') is null and cm."articleId" is not null end,
            e.id, coalesce(e.category, '')
       from public.expenses e
       left join public.fin_category_map cm on cm.category = e.category
@@ -206,7 +212,9 @@ begin
                                                                      'lines', po.n, 'total', po.s)
                                                   order by (po.art = ''), po.art, (po.typ <> 'teacher'), po.pos) from po), '[]'::jsonb)),
       'unclassified', coalesce((select jsonb_agg(jsonb_build_object('category', un.category, 'rows', un.n, 'total', un.s)
-                                                 order by un.s desc, un.category) from un), '[]'::jsonb))
+                                                 order by un.s desc, un.category) from un), '[]'::jsonb),
+      -- F2.3: davrdagi tasnif oylari (noyabr–yanvar eski xarajatlari) — yozuvlar, tasdiqlangani, buxgalter imzosi («qisman» belgisi)
+      'classify', app.fin_class_stats(array(select x from unnest(v_m) with ordinality u(x, o) where x = any(app.fin_class_months()) order by o)))
     into v_out;
   return v_out;
 end $$;

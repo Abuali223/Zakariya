@@ -131,6 +131,8 @@ set local iqror.migrating = '1';
 --dev \ir fin-exp.sql
 --dev \ir fin-cp.sql
 --dev \ir kassa-fix.sql
+-- F2.3: noyabr–yanvar eski xarajatlariga statiya — buxgalter tasnifi va imzosi (RP-09 shu yordamchilarni ishlatadi — fin-matrix.sql dan oldin)
+--dev \ir fin-class.sql
 --dev \ir fin-matrix.sql
 --dev \ir fin-version.sql
 \ir payer-code-mask.sql

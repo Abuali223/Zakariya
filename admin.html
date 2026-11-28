@@ -1565,6 +1565,9 @@ function cpReg(){ return !!KASSA.on && Number(KASSA.ver)>=14 && (!!SESSION.isAdm
 //   relizi 23+ (fin-matrix.sql: fin_matrix — Direktor, Moliya menejeri, buxgalter; kassa ishga tushmagan bo'lsa ham — kassagacha yozuvlar ham
 //   kiradi). Oyna va XLSX — assets/js/fin-matrix.js.
 function rp09Reg(){ return !!KASSA.on && Number(KASSA.ver)>=23 && (!!SESSION.isAdmin || ['finance_mgr','accountant'].includes(SESSION.role)); }
+// F2.3: noyabr–yanvar eski xarajatlariga statiya — buxgalter tasnifi va imzosi; server relizi 27+ (fin-class.sql: fin_exp_class_list /
+//   fin_exp_classify — buxgalter, Moliya menejeri, Direktor; fin_exp_class_sign — buxgalter). Oyna — assets/js/fin-class.js.
+function clsReg(){ return !!KASSA.on && Number(KASSA.ver)>=27 && (!!SESSION.isAdmin || ['finance_mgr','accountant'].includes(SESSION.role)); }
 // F2.11: o'quvchi avansini naqdsiz (bank / karta) qaytarish — server relizi 20+ (kassa-links.sql: fin_refund_credit; kassa ishga tushmagan bo'lsa ham)
 function credRefundNc(){ return !!KASSA.on && Number(KASSA.ver)>=20; }
 const EXP_MCHIP={ bank:'Bank', card:'Karta', cash:'Naqd' };
@@ -10392,7 +10395,8 @@ async function renderAccounting(){
     <div class="card" style="padding:14px 20px;margin-bottom:16px"><div class="att-controls">
       <label>Oy<input type="month" id="ac-month" value="${curMonth()}"></label>${cpReg()?`
       <label>&nbsp;<button class="btn ghost2" id="ac-cp" style="width:100%" title="Kontragentlar: rekvizitlar (STIR, hisob raqami, MFO), shartnoma; ko‘chirma — barcha to‘lovlar">🏢 Kontragentlar</button></label>`:''}${rp09Reg()?`
-      <label>&nbsp;<button class="btn ghost2" id="ac-rp09" style="width:100%" title="RP-09: barcha to‘lov usullari bo‘yicha statiya matritsasi (o‘quv yoki kalendar yili) va maosh taqsimoti — Excel (XLSX)">📊 RP-09 matritsa</button></label>`:''}${accRO()?'':`
+      <label>&nbsp;<button class="btn ghost2" id="ac-rp09" style="width:100%" title="RP-09: barcha to‘lov usullari bo‘yicha statiya matritsasi (o‘quv yoki kalendar yili) va maosh taqsimoti — Excel (XLSX)">📊 RP-09 matritsa</button></label>`:''}${clsReg()?`
+      <label>&nbsp;<button class="btn ghost2" id="ac-cls" style="width:100%" title="Noyabr–yanvar eski xarajatlariga aniq statiya (toifadan olingan taxminiy statiyani tasdiqlash yoki almashtirish) va buxgalter imzosi">🏷 Statiya tasnifi</button></label>`:''}${accRO()?'':`
       <label>&nbsp;<button class="btn gold" id="ac-add" style="width:100%">+ Xarajat qo‘shish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="ac-payroll" style="width:100%" title="Barcha o‘qituvchilar maoshini shu oyga «Maosh» xarajati qilib yozadi">💼 Oylik maoshni yozish</button></label>
       <label>&nbsp;<button class="btn ghost2" id="ac-paysal" style="width:100%" title="Har xodimni tanlab oylik maoshini berish + chek (qaysi oy uchunligi bilan)">💵 Maosh berish (xodimga)</button></label>
@@ -10719,6 +10723,8 @@ async function renderAccounting(){
     .catch(err=>toast('Xatolik: '+errMsg(err),true)));   // F2.2: kontragentlar (cpReg — kim ko'radi; server ham tekshiradi)
   if($('#ac-rp09')) $('#ac-rp09').addEventListener('click',()=>finMod('fin-matrix').then(m=>m.openMatrix(finCtx(), { today:tkDay(new Date()) }))
     .catch(err=>toast('Xatolik: '+errMsg(err),true)));   // F2.5: RP-09 (rp09Reg — kim ko'radi; server ham tekshiradi)
+  if($('#ac-cls')) $('#ac-cls').addEventListener('click',()=>finMod('fin-class').then(m=>m.openClassify(finCtx(), { today:tkDay(new Date()), onDone:expDone }))
+    .catch(err=>toast('Xatolik: '+errMsg(err),true)));   // F2.3: statiya tasnifi (clsReg — kim ko'radi; server ham tekshiradi; yopilgach ro'yxat yangilanadi)
   // Oylik maosh -> «Maosh» xarajati (bir oyga bir marta: id=payroll__oy, qayta bossa yangilanadi)
   if($('#ac-payroll')) $('#ac-payroll').addEventListener('click', async ()=>{
     const M=$('#ac-month').value||curMonth();

@@ -30,13 +30,14 @@ Ism, lavozim, rekvizit va summalar bu yerda yozilmaydi (repozitoriy ommaviy) —
 | ≈ 21-dekabr (dushanba), ish vaqtidan keyin | **Yashirin o‘rnatish**: bo‘lim jonli tizimga chiqadi, lekin «ishga tushadigan kun» bo‘sh — hamma oyna avvalgidek ishlaydi (shart: 1-qabul sinovi va buxgalterning stenddagi ko‘rigi — yozma rozilik bilan) | server huquqi bor shaxs (§3) |
 | 21–25-dekabr (du–ju) | 2-qabul sinovi (stendda), maosh kuni mashqi | hamma rollar |
 | 26-dekabr | Qabul sinovi varaqlari (Sh-5) imzolangan; **shartlar (G1–G6) bo‘yicha yakuniy tekshiruv** | direktor |
+| Yashirin o‘rnatishdan 30-dekabrgacha | Noyabr va dekabr eski «Buxgalteriya» xarajatlari statiyasi: «Buxgalteriya» → «🏷 Statiya tasnifi» — har yozuvga statiya (yoki toifadagisini tasdiqlash) va oy imzosi (F2.3; `yoriqnomalar.md`, 2-bo‘lim). 4-yanvar ertalabki davr qulfidan (§4, 8–9-qadamlar) **oldin** tugashi shart — qulfdan keyin o‘sha yozuvlar tasnifi faqat davr qayta ochilsa o‘zgaradi | buxgalter (moliya menejeri yordamida) |
 | **30-dekabr (chorshanba) kechqurun**, kassa yopilgach | Komissiya sanashi, qog‘oz daftarlarni yopish, sozlamalar, boshlang‘ich qoldiq, «Kassa ishga tushadigan kun», berilmagan qaytarishlar ro‘yxati (§4) | komissiya, direktor, buxgalter (ikkalasi shaxsan) |
 | 31-dekabr (payshanba) | **Kassa naqd pul qabul qilmaydi va bermaydi** (Click, Uzum va bank orqali to‘lovlar ishlayveradi) | kassir |
 | 1–3-yanvar | Kassa yopiq (1-yanvar — bayram, 2–3-yanvar — dam olish) | — |
 | 4-yanvar ertalab, birinchi kassa kuni ochilishidan oldin | «31-dekabr holati» davr surati qulf bilan (§4, 8–9-qadamlar); 31-dekabrda naqd harakat bo‘lgan bo‘lsa — avval qayta sanash | direktor, komissiya |
 | 4-yanvar (dushanba) — birinchi kassa kuni | **Rasmiy boshlanish** (egasi qarori, 2026-11-16) | kassir (g‘aznachi) |
 | Birinchi 5 ish kuni | Parallel yuritish: kunlik nazorat varag‘i | moliya menejeri |
-| Yanvar oxiri | Oy oxiri sanashi; yanvar avans hisobotlari kiritiladi; davrni yopish | komissiya, buxgalter, direktor |
+| Yanvar oxiri | Oy oxiri sanashi; yanvar avans hisobotlari kiritiladi; yanvarning eski xarajat yozuvlari bo‘lsa — tasnif va imzo (F2.3); davrni yopish | komissiya, buxgalter, direktor |
 
 Biror shart bajarilmasa — boshlanish sanasi suriladi (keyingi oyning birinchi ish kuni — zaxira sana 1-fevral; boshlang‘ich qoldiq — o‘sha oy oxiridagi sanash).
 
@@ -265,7 +266,8 @@ Tartib muhim — yuqoridan pastga. Hamma amal Direktor hisobida, komissiya ishti
    beriladi), ismli nusxa Direktorning xavfsiz arxiviga qo‘yiladi.
 9. **Davrni yopish** — 8-qadamdagi belgi bilan surat bilan birga (alohida kerak bo‘lsa: «Davr» → «Davr qulfini o‘zgartirish» →
    «Shu sanagacha yopiq» = 31-dekabr → «Qulfni saqlash»). Qulfdan **oldin** 31-dekabrgacha sanali kechikkan yozuvlar kiritilgan
-   bo‘lsin (pastdagi «Kechikib topilgan yozuv»). Shundan keyin 31-dekabrgacha
+   bo‘lsin (pastdagi «Kechikib topilgan yozuv»). Noyabr va dekabr eski xarajatlari statiya tasnifi imzolangan bo‘lsin (F2.3: RP-09 dagi «Eski xarajatlar
+   statiyasi (noyabr–yanvar)» qatorida ikkala oy — «imzolangan»; eski yozuvi yo‘q oy u yerda ko‘rinmaydi). Shundan keyin 31-dekabrgacha
    sanali to‘lov, xarajat, maosh to‘lovi va avans kiritilmaydi va o‘zgartirilmaydi (onlayn to‘lovlar bundan mustasno); o‘sha davr
    to‘lovini qaytarish, biriktirish yoki holatini o‘zgartirish ham (tushum o‘zgaradi) — avval davr sababi bilan qayta ochiladi. Keyingi
    oylarda: davr faqat shu sanagacha bo‘lgan barcha kassa kunlari sanab yopilgan bo‘lsa yopiladi; yopilgan davrdagi kassa kuni

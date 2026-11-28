@@ -7,7 +7,8 @@
 //   Faqat mavjud komponentlar (.modal-*, .btn, .chip, .tablewrap) — yangi CSS yo'q. XLSX — window.XLSX (sahifada yuklangan).
 //   Kirish:  openMatrix(ctx, o) — o: { today }
 //            Sof funksiyalar (fin-matrix.test.mjs): yearDefault, yearOptions, periodLabel, monthLabel, rowMonths, matrixTotals,
-//            controlCheck, payrollNote, articleLabel, matrixSheets, fileName.
+//            controlCheck, payrollNote, articleLabel, classifyNotes, matrixSheets, fileName.
+//   F2.3: noyabr–yanvar eski xarajatlari — buxgalter tasdiqlaguncha «≈ taxminiy»; oylar holati (M.classify) — xulosada va «Nazorat» varag'ida.
 // =====================================================================
 
 let C = null;                                    // admin.html bergan yordamchilar (ctx)
@@ -36,6 +37,7 @@ const chip = (t, fg, bg, title) => `<span class="chip" style="background:${bg};c
 const zeros = () => Array(12).fill(0);
 const add = (a, b) => a.map((x, i) => r2(x + num(b && b[i])));
 const sum = a => r2((a || []).reduce((s, x) => s + num(x), 0));
+const dmy = v => { const t = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(t) ? `${t.slice(8, 10)}.${t.slice(5, 7)}.${t.slice(0, 4)}` : t; };
 
 // ---------------------------------------------------------------- sof funksiyalar
 // Standart yil: o'quv yili — 1-sentyabrdan yangisi (avgustda — o'tgan o'quv yili), kalendar — joriy yil.
@@ -100,6 +102,16 @@ export function articleLabel(r) {
   return r.dir === 'in' ? 'Statiyasiz kirim' : 'Statiyasiz / aniqlanmagan';
 }
 const flagText = r => [r.transfer ? 'ichki o‘tkazma' : '', r.approx ? 'toifadan (taxminiy)' : ''].filter(Boolean).join(', ');
+// F2.3: eski xarajatlar statiya tasnifi — yozuvi bor oylar: [{month, n, confirmed, text, warn}] («qisman» — tasdiqlanmagani bor;
+//   imzolanmagan yoki imzosi eskirgan oy ham e'tibor talab qiladi)
+export function classifyNotes(M) {
+  return ((M && M.classify) || []).filter(c => num(c.n) > 0).map(c => {
+    const sg = c.sign && typeof c.sign === 'object' ? c.sign : null, n = num(c.n), k = num(c.confirmed), ok = !!(sg && sg.valid);
+    const text = ok ? `imzolangan (${sg.by || 'buxgalter'}, ${dmy(sg.at)})` : k < n ? `qisman: ${n} tadan ${k} tasi tasdiqlangan`
+      : sg ? 'imzo eskirgan — qayta imzolash kerak' : 'tasdiqlangan, buxgalter imzosi kutilmoqda';
+    return { month: c.month, n, confirmed: k, text, warn: !ok };
+  });
+}
 export const fileName = M => `RP-09_${M && M.kind === 'school' ? `oquv-${M.year}-${num(M.year) + 1}` : `kalendar-${(M && M.year) || ''}`}.xlsx`;
 
 // XLSX varaqlari: Matritsa (pul harakati + hisobdor + hisoblash), Usullar (statiya × usul), Maosh taqsimoti, Nazorat.
@@ -140,6 +152,8 @@ export function matrixSheets(M, o) {
   m4.push(['Manbalar jami', K.docs, K.srcTotal], ['Matritsa jami (pul + hisobdor + hisoblash)', '', K.rowsTotal], ['Moslik', '', K.ok ? 'mos' : 'MOS EMAS'], [],
     ['Kassa: order sarlavhalari (kirim / chiqim / soni)', num(kh.docs), r2(num(kh.in) + num(kh.out))], ['Kassa moslik', '', K.kassaOk ? 'mos' : 'MOS EMAS']);
   if (K.unclassified.length) { m4.push([], ['Statiyasiz xarajat toifalari', 'Yozuvlar', 'Jami']); for (const u of K.unclassified) m4.push([u.category || '(toifasiz)', num(u.rows), r2(u.total)]); }
+  const CN = classifyNotes(M);
+  if (CN.length) { m4.push([], ['Eski xarajatlar statiya tasnifi (noyabr–yanvar, F2.3)', 'Yozuvlar', 'Holat']); for (const c of CN) m4.push([monthLabel(c.month), c.n, c.text]); }
   const wide = [12, 34, 18, ...ms.map(() => 13), 15];
   return [{ name: 'Matritsa', rows: m1, cols: wide.map(w => ({ wch: w })) }, { name: 'Usullar', rows: m2, cols: wide.map(w => ({ wch: w })) },
           { name: 'Maosh taqsimoti', rows: m3, cols: [16, 30, 14, 16, 14, 52].map(w => ({ wch: w })) },
@@ -197,7 +211,8 @@ function draw(M) {
   const rows = (M.rows || []).filter(r => sum(rowMonths(r, view)) !== 0);
   const cells = arr => arr.map(x => `<td style="text-align:right;white-space:nowrap">${x ? esc(som(x)) : ''}</td>`).join('') + `<td style="text-align:right;white-space:nowrap"><b>${esc(som(sum(arr)))}</b></td>`;
   const flag = r => (r.transfer ? chip('ichki o‘tkazma', '#344054', '#F2F4F7', 'Bankka topshirish / bankdan olish, o‘z hisoblari orasida — daromad ham, xarajat ham emas') : '')
-    + (r.approx ? chip('≈ toifadan', '#B54708', '#FEF3E2', 'Statiya xarajat toifasidan olingan (taxminiy) — yozuvda statiya yo‘q') : '');
+    + (r.approx ? chip('≈ toifadan', '#B54708', '#FEF3E2', 'Statiya xarajat toifasidan olingan (taxminiy): yozuvda statiya yo‘q yoki (noyabr–yanvar eski yozuvlari) buxgalter hali tasdiqlamagan — «🏷 Statiya tasnifi»') : '');
+  const CN = classifyNotes(M);
   const trs = dir => rows.filter(r => r.dir === dir).map(r => `<tr><td data-label="Statiya" style="min-width:200px">${esc(articleLabel(r))}<div style="display:flex;gap:4px;flex-wrap:wrap">${flag(r)}</div></td>${cells(rowMonths(r, view))}</tr>`).join('');
   const tot = (t, arr) => `<tr><td><b>${esc(t)}</b></td>${cells(arr)}</tr>`;
   const sub = dir => { const arr = rows.filter(r => r.dir === dir).reduce((a, r) => add(a, rowMonths(r, view)), zeros()); return tot(dir === 'in' ? 'Jami kirim' : 'Jami chiqim', arr); };
@@ -214,7 +229,8 @@ function draw(M) {
       <b>${esc(periodLabel(M.kind, num(M.year)))}</b><br>
       Pul harakati: kirim ${nw(sum(T.inAll), 1)}, chiqim ${nw(sum(T.outAll), 1)}${sum(T.trIn) || sum(T.trOut) ? ` (shundan ichki o‘tkazma: kirim ${nw(sum(T.trIn))}, chiqim ${nw(sum(T.trOut))})` : ''} · sof oqim (ichki o‘tkazmalarsiz) ${nw(sum(T.net), 1)}
       <br>Hisobdor orqali: ${nw(sum(T.accountable))} · hisoblangan maosh: ${nw(sum(T.accrual))} (pul jamiga kirmaydi)
-      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${ok(K.ok, `Jami = Σ hujjatlar (${K.docs} ta)`)}${ok(K.kassaOk, 'kassa orderlari')}${K.payrollWarn ? chip(`maosh: ${K.payrollWarn} oyda e’tibor`, '#B54708', '#FEF3E2') : ''}${K.unclassified.length ? chip(`statiyasiz toifalar: ${K.unclassified.length}`, '#B54708', '#FEF3E2') : ''}</div></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${ok(K.ok, `Jami = Σ hujjatlar (${K.docs} ta)`)}${ok(K.kassaOk, 'kassa orderlari')}${K.payrollWarn ? chip(`maosh: ${K.payrollWarn} oyda e’tibor`, '#B54708', '#FEF3E2') : ''}${K.unclassified.length ? chip(`statiyasiz toifalar: ${K.unclassified.length}`, '#B54708', '#FEF3E2') : ''}</div>
+      ${CN.length ? `<div id="mx-cls" style="margin-top:6px">Eski xarajatlar statiyasi (noyabr–yanvar): ${CN.map(c => `<span data-clm="${esc(c.month)}">${esc(monthLabel(c.month))} — ${c.warn ? chip(c.text, '#B54708', '#FEF3E2') : esc(c.text)}</span>`).join(' · ')}</div>` : ''}</div>
     <div class="small muted" style="margin-top:8px">Ko‘rinish: <b>${esc(view === 'money' ? 'pul harakati (barcha usullar)' : METHOD_LBL[view] || view)}</b></div>
     ${rows.length ? `<div class="tablewrap" style="max-height:420px;overflow:auto;margin-top:6px"><table id="mx-tbl"><thead><tr><th>Statiya</th>${mh.map(h => `<th style="text-align:right;white-space:nowrap">${esc(h)}</th>`).join('')}<th style="text-align:right">Jami</th></tr></thead><tbody>
       ${hasIn ? trs('in') + sub('in') : ''}${hasOut ? trs('out') + sub('out') : ''}

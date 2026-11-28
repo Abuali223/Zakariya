@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { yearDefault, yearOptions, periodLabel, monthLabel, rowMonths, matrixTotals, controlCheck, payrollNote, articleLabel, matrixSheets, fileName,
-         MONEY, METHOD_LBL, SOURCE_LBL } from './fin-matrix.js';
+         classifyNotes, MONEY, METHOD_LBL, SOURCE_LBL } from './fin-matrix.js';
 
 const z = () => Array(12).fill(0);
 const at = (i, v) => { const a = z(); a[i] = v; return a; };
@@ -142,6 +142,26 @@ test('XLSX: 4 varaq, sarlavhalar, jami qatorlari, hisobdor va hisoblash bloklari
   assert.deepEqual(m4.find(r => r[0] === 'Noma’lum toifa'), ['Noma’lum toifa', 1, 33000]);
   assert.equal(sh[0].cols.length, 16);
 });
+test('F2.3 eski xarajatlar tasnifi (M.classify): yozuvi bor oylar — qisman / imzo kutilmoqda / imzolangan / eskirgan; «Nazorat» varag‘ida', () => {
+  const M = { ...M0(), classify: [
+    { month: '2026-11', n: 5, confirmed: 4, sign: { valid: false, by: 'Sinov Buxgalter', at: '2026-12-29T10:00:00+05:00' } },
+    { month: '2026-12', n: 2, confirmed: 2, sign: null },
+    { month: '2027-01', n: 3, confirmed: 3, sign: { valid: true, by: 'Sinov Buxgalter', at: '2027-02-02T10:00:00+05:00' } },
+    { month: '2027-02', n: 0, confirmed: 0, sign: null }] };
+  assert.deepEqual(classifyNotes(M), [
+    { month: '2026-11', n: 5, confirmed: 4, text: 'qisman: 5 tadan 4 tasi tasdiqlangan', warn: true },
+    { month: '2026-12', n: 2, confirmed: 2, text: 'tasdiqlangan, buxgalter imzosi kutilmoqda', warn: true },
+    { month: '2027-01', n: 3, confirmed: 3, text: 'imzolangan (Sinov Buxgalter, 02.02.2027)', warn: false }]);
+  assert.deepEqual(classifyNotes({ classify: [{ month: '2026-12', n: 2, confirmed: 2, sign: { valid: false } }] })[0].text, 'imzo eskirgan — qayta imzolash kerak');
+  assert.deepEqual(classifyNotes(M0()), []); assert.deepEqual(classifyNotes(null), []);
+  const nz = matrixSheets(M, {}).find(x => x.name === 'Nazorat').rows;
+  const i = nz.findIndex(r => r[0] === 'Eski xarajatlar statiya tasnifi (noyabr–yanvar, F2.3)');
+  assert.ok(i > 0, 'Nazorat varag‘ida tasnif bloki');
+  assert.deepEqual(nz.slice(i + 1, i + 4), [['Noy 2026', 5, 'qisman: 5 tadan 4 tasi tasdiqlangan'], ['Dek 2026', 2, 'tasdiqlangan, buxgalter imzosi kutilmoqda'],
+                                             ['Yan 2027', 3, 'imzolangan (Sinov Buxgalter, 02.02.2027)']]);
+  assert.ok(!matrixSheets(M0(), {}).find(x => x.name === 'Nazorat').rows.some(r => String(r[0]).startsWith('Eski xarajatlar')), 'tasnif oyi yo‘q — blok yo‘q');
+});
+
 test('fayl nomi', () => {
   assert.equal(fileName({ kind: 'school', year: 2026 }), 'RP-09_oquv-2026-2027.xlsx');
   assert.equal(fileName({ kind: 'calendar', year: 2027 }), 'RP-09_kalendar-2027.xlsx');

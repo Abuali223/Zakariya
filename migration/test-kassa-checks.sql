@@ -102,7 +102,7 @@ select zz.clock('2027-01-04 10:00+05');
 
 -- ---------- (A) toza holat: bo'sh modul ----------
 \ir kassa-checks.sql
-select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz (reliz 15; himoya mantig''i izi — toza zanjirniki bilan bir xil)', :'bad' || '/' || :'err' || '/' || :'ver' || '/' || :'c23' || '/' || :'c24', '^0/0/26/0/0$');
+select zz.chk('A0 bo''sh modul: muammo yo''q, band xatosiz (reliz 15; himoya mantig''i izi — toza zanjirniki bilan bir xil)', :'bad' || '/' || :'err' || '/' || :'ver' || '/' || :'c23' || '/' || :'c24', '^0/0/27/0/0$');
 
 -- ---------- 1-kun (04.01.2027): ishga tushirish va hujjatlar ----------
 select zz.chk('A1 ishga tushirish: sozlamalar va boshlang''ich qoldiq 2 000 000',

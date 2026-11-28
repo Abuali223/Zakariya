@@ -3919,6 +3919,55 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   Sozlamalar»da yoqing; muammo chiqsa — o'chirish darhol orqaga qaytaradi (`ishga-tushirish.md` 10-bo'lim, `yoriqnomalar.md` 3-bo'lim).
   «G'aznachi» roli endi kassir bilan teng; marketing faqat oylik jamini ko'radi. Modul bilan birga (`--dev`) — keyingi deploy bilan.
 
+## 103) F2.3 — noyabr–yanvar eski xarajatlariga statiya: buxgalter tasnifi va oy imzosi, RP-09 da «qisman» belgisi (reliz 27) — 2026-11-28
+
+- **Egasi (2026-11-28):** «F2.3 ham yakunlab ber» — 2026-11-26 da keyinga surilgan band (reja: «Noyabr–yanvar xarajatlariga statiya
+  (sinov ishga tushirishi → buxgalter RPC si)», qabul — «Buxgalter imzolaydi»; §4.16: «2026-yil noyabr–dekabr — F2.3 orqali, «qisman»
+  belgisi bilan»).
+- **Doira (`fin-class.sql`, yangi, `--dev`; zanjirda `kassa-fix.sql` dan keyin, `fin-matrix.sql` dan oldin):** «Buxgalteriya»dagi
+  hujjatsiz eski yozuv — `expDocId` va `cashDocId` bo'sh, `kind = 'expense'` (maosh hisoblash qatori emas), oyi (bo'sh bo'lsa — sanadan)
+  2026-11 … 2027-01 (`app.fin_class_in`, `app.fin_class_months`). Hujjatli yozuv statiyasi — hujjatda («Tuzatish», F2.1), kassa yozuviniki —
+  QT (F2.13): sababli rad (`fin:class_scope`).
+- **Tasnif (`fin_exp_classify(items)`, 1–200 yozuv, bitta tranzaksiya):** har yozuv FOR UPDATE; statiya — faol, EX / OP, hisobvarag'i bor,
+  EX-44 / 45 / 47 va OP-23 emas (`fin:class_article`); izoh majburiy statiyada («Boshqa», EX-49) izoh 3+ belgi (`fin:class_note`); yopilgan
+  davr — `fin:locked` (`app.fin_lock_check`, QT kabi). `expenses."articleId"` faqat statiya o'zgarsa yangilanadi (summa, sana, toifa,
+  izoh, usul — yo'q); har tasnif — jurnal `fin_exp_class` (eski → yangi, izoh, kim, rol, qachon); toifadagi statiyani tasdiqlash ham
+  jurnalga; o'zgarishsiz takror (shu statiya, tasdiqlangan, shu izoh) — o'tkaziladi. Javob: changed / confirmed / unchanged. Bayroq
+  `iqror.fin_rpc` funksiyaning o'zida (fin-guard.sql qayta yuklanmasa ham detektor jim).
+- **Holat:** yozuv tasdiqlangan — oxirgi jurnal `newArticle` = hozirgi statiya (`app.fin_class_ok`); statiya keyin boshqa yo'l bilan
+  o'zgarsa — yana taxminiy. Oy: soni, tasdiqlangan, jami, «Boshqa» summasi, imzo (`app.fin_class_stats`).
+- **Imzo (`fin_exp_class_sign(oy)`):** faqat buxgalter; advisory lock, oxirgi jurnal raqami statistikadan oldin o'qiladi; yozuv yo'q —
+  `fin:class_empty`, tasdiqlanmagani bor — `fin:class_open` («N tadan M tasi qoldi»), haqiqiy imzo bor — dup. Imzo yozuvi
+  `fin_exp_class_sign` (soni, jami, «Boshqa», oxirgi jurnal raqami); haqiqiyligi o'qishda hisoblanadi: soni, jami, hammasi tasdiqlangan va
+  oxirgi jurnal raqami teng — aks holda «imzo eskirgan».
+- **Jadvallar:** `fin_exp_class`, `fin_exp_class_sign` — RLS, o'qish Direktor / Moliya menejeri / buxgalter; yozuv faqat funksiyalar
+  orqali (`trg_fin_class_guard`: UPDATE / DELETE — rad, INSERT — faqat `iqror.fin_class_rpc` bilan; tizim istisnosi yo'q).
+- **RP-09 (`fin-matrix.sql`):** shu oylarda «≈» — statiya bor, lekin tasdiqlanmagan (statiya yo'q — «statiyasiz»); boshqa oylarda —
+  avvalgi qoida. Javobda `classify` (davrdagi tasnif oylari). Sahifa: «Eski xarajatlar statiyasi (noyabr–yanvar)» qatori, «≈» izohi,
+  XLSX «Nazorat» varag'ida blok (`classifyNotes`).
+- **Sahifa:** «Buxgalteriya» → «🏷 Statiya tasnifi» (`fin-class.js`; Direktor, Moliya menejeri, buxgalter; server relizi 27+): oy tugmalari
+  (tasdiqlangan / jami), oy yig'masi («Boshqa» ulushi — maqsad ≤ 2 %, statiyalar bo'yicha), holat («qisman: N tadan M tasi
+  tasdiqlangan» / «buxgalter imzosi kutilmoqda» / «imzolangan — kim, sana» / «imzo eskirgan»), yopilgan davr bandi, jadval (xarajat —
+  summa, sana, toifa, izoh; statiya va tasnif izohi; holat), «Hammasini belgilash» + bitta statiya → «Belgilanganlarga qo'yish», «✓
+  Saqlash» (o'zgarganlar, faqat izoh, belgilab tasdiqlash; xatolar — xabar), «✍ Imzolash» (buxgalter; tasdiq oynasi). Umumiy 560 px
+  oynada — 4 ustunli ixcham jadval (birinchi variant 8 ustun edi — skrinshotda siqilgan, statiya maydoni «Holat» ustiga tushgan; tuzatildi).
+- **Reliz 27:** `fin-version`, `SERVER_VER`, `kassa-checks` (moliya jadvallari 25, ochiq funksiyalar 69, ichki 150, triggerlar 42, RLS
+  siyosatlari 24, barmoq izlari 440; 8-bandda `trg_fin_class_guard` × 2), `test-kassa-checks` (A0).
+- **Sinovlar:** yangi `test-fin-class.sql` (31: doira va rad sabablari, huquqlar, statiya cheklari, izoh, jurnal, takror, yopilgan davr —
+  o'zgartirish ham, tasdiq / izoh ham, holat, imzo — bo'sh / ochiq / dup / eskirish (statiyani to'g'ridan-to'g'ri o'zgartirish, 0 so'mlik
+  yangi yozuv) / tiklanish, RP-09 «≈» va `classify`, qo'riqchi trigger, detektor jurnali bo'sh); moslangan: `test-rls-matrix` (2 jadval,
+  48), `test-fin-rights` (L2 / L4 ro'yxatlari), `test-fin-guard` (bayroqli funksiyalar 29), `test-sales-role` (urug'), `test-kassa-checks`.
+  Mutatsiya 36/36 (birinchi o'tishda 3 tasi tirik qoldi — tasdiqdagi qulf tekshiruvi, statiyani e'tiborsiz qoldirgan `fin_class_ok`,
+  faqat jami bo'yicha imzo — yangi B14 / C7 tekshiruvlari bilan ushlandi). Node: `fin-class` 7 (oylar SQL bilan bir xil), `fin-matrix`
+  +1 (12). Brauzer — yangi `k29` (16).
+- **Natija:** to'liq regressiya yakuniy kod ustida (dev zanjir va qayta zanjir, poyga 78/78, jonli zanjir va qayta zanjir, barcha node va
+  server sinovlari) — hammasi yashil (`test-fin-class` 31/31, `test-rls-matrix` 48/48, `test-fin-guard` 44/44, `test-fin-rights` 125/125,
+  `test-fin-matrix` 53/53, `test-kassa-checks` 55/55, `test-sales-role` 121/121). Brauzer to'plami — 36 o'tish, 860 tekshiruv: hammasi
+  o'tdi, barcha dev qatorlarda `direct=0` (`k29` 16/16, `k25` RP-09 15/15).
+- **Egasi va buxgalter uchun:** deploydan (yashirin o'rnatish) keyin «Buxgalteriya» → «🏷 Statiya tasnifi»: noyabr va dekabrni 4-yanvar
+  ertalabki davr qulfidan oldin tasniflab imzolash (qulfdan keyin — faqat Direktor davrni qayta ochsa), yanvarni — yanvar yopilishidan
+  oldin (`yoriqnomalar.md` 2-bo'lim, `ishga-tushirish.md` taqvimi). Modul bilan birga (`--dev`) — keyingi deploy bilan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

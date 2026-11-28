@@ -81,7 +81,7 @@ insert into zz.t (tbl, kind)
 select c.relname, case c.relkind when 'v' then 'v' else 'r' end from pg_class c
  where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'v')
    and (c.relname in ('payments', 'invoices', 'student_credit', 'credit_ledger', 'applied_payments', 'expenses', 'refunds', 'salary_payments',
-                      'staff_advances', 'payroll_runs', 'payroll_lines', 'fin_direct_log', 'change_log',
+                      'staff_advances', 'payroll_runs', 'payroll_lines', 'fin_direct_log', 'change_log', 'fin_exp_class', 'fin_exp_class_sign',
                       'gl_accounts', 'fin_articles', 'fin_category_map', 'fin_op_rules', 'fin_org', 'fin_signatories', 'fin_counterparties', 'cash_desks',
                       'doc_counters', 'cash_days', 'cash_docs', 'cash_doc_lines', 'payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots',
                       'cash_prints', 'cash_handovers', 'fin_exp_docs', 'cash_doc_fixes', 'cash_doc_verify', 'cash_doc_files')
@@ -99,7 +99,8 @@ declare col record; v_cols text[] := '{}'; v_vals text[] := '{}'; v_ov jsonb; v_
     "fin_counterparties": {"kind": "other", "name": "Sinov Hamkor"},
     "fin_exp_docs": {"origin": "legacy", "status": "void", "voidReason": "zz", "voidedAt": "2026-11-02 10:00:00+05"},
     "invoices": {"month": "2026-11"}, "payroll_runs": {"id": "2026-10", "status": "draft"},
-    "fin_direct_log": {"grp": "payments", "op": "UPDATE", "via": "rest"}, "change_log": {"op": "UPDATE"}
+    "fin_direct_log": {"grp": "payments", "op": "UPDATE", "via": "rest"}, "change_log": {"op": "UPDATE"},
+    "fin_exp_class": {"month": "2026-11", "newArticle": "EX-32"}, "fin_exp_class_sign": {"month": "2026-11"}
   }'::jsonb;
 begin
   v_ov := coalesce(ovr -> p_tbl, '{}'::jsonb);
@@ -198,6 +199,7 @@ insert into zz.exp values
   ('payment_allocations', 'S=dir,fm,acc,kas,trs;I=-;U=-;D=-'),
   ('cash_doc_files', 'S=dir,fm,acc;I=-;U=-;D=-'),
   ('change_log', 'S=dir;I=-;U=-;D=-'), ('fin_direct_log', 'S=dir;I=-;U=-;D=-'), ('fin_snapshots', 'S=dir;I=-;U=-;D=-'),
+  ('fin_exp_class', 'S=dir,fm,acc;I=-;U=-;D=-'), ('fin_exp_class_sign', 'S=dir,fm,acc;I=-;U=-;D=-'),   -- F2.3: statiya tasnifi (faqat funksiya orqali yoziladi)
   ('credit_ledger', 'S=dir,fm,acc,kas,trs,zav,par;I=dir;U=-;D=-'),
   ('doc_counters', 'S=-;I=-;U=-;D=-'),
   ('expenses', 'S=dir,fm,acc,kas,trs,zav;I=dir,fm;U=dir,fm;D=dir,fm'),
@@ -220,17 +222,17 @@ select zz.chk('M00 urug'': har jadvalda kamida bitta qator (to''ldirib bo''lmaga
 select zz.chk('M' || lpad(row_number() over (order by t.tbl)::text, 2, '0') || ' ' || t.tbl, zz.row(t.tbl), '^' || coalesce(regexp_replace(e.e, '([.$|()\[\]*+?{}^\\])', '\\\1', 'g'), '<kutilgan yo''q>') || '$')
   from zz.t t left join zz.exp e on e.tbl = t.tbl order by t.tbl;
 
-select zz.chk('M41 tizimga kirmagan (anon): hech bir pul / kassa jadvali va ko''rinishini o''qiy olmaydi, yoza olmaydi',
+select zz.chk('Q1 tizimga kirmagan (anon): hech bir pul / kassa jadvali va ko''rinishini o''qiy olmaydi, yoza olmaydi',
   coalesce((select string_agg(m.tbl || '.' || m.op, ',' order by m.tbl, m.op) from zz.mx m where m.who = 'anon' and zz.cell(m.op, m.got) <> '-'), ''), '^$');
-select zz.chk('M42 RF-12 marketing: hech bir pul / kassa jadvali va ko''rinishi yo''q (xarajat — faqat yig''ma funksiya)',
+select zz.chk('Q2 RF-12 marketing: hech bir pul / kassa jadvali va ko''rinishi yo''q (xarajat — faqat yig''ma funksiya)',
   coalesce((select string_agg(m.tbl || '.' || m.op, ',' order by m.tbl, m.op) from zz.mx m where m.who = 'mkt' and zz.cell(m.op, m.got) <> '-'), ''), '^$');
-select zz.chk('M43 RF-11 g''aznachi = kassir: har jadval va amalda bir xil',
+select zz.chk('Q3 RF-11 g''aznachi = kassir: har jadval va amalda bir xil',
   coalesce((select string_agg(a.tbl || '.' || a.op, ',' order by a.tbl, a.op) from zz.mx a join zz.mx b on b.tbl = a.tbl and b.op = a.op
              where a.who = 'trs' and b.who = 'kas' and zz.cell(a.op, a.got) <> zz.cell(b.op, b.got)), ''), '^$');
-select zz.chk('M44 to''g''ridan-to''g''ri yozuv (INSERT / UPDATE / DELETE) faqat Direktor, moliya menejeri, kassir, g''aznachi va HR da (boshqa rollar — hech qayerda)',
+select zz.chk('Q4 to''g''ridan-to''g''ri yozuv (INSERT / UPDATE / DELETE) faqat Direktor, moliya menejeri, kassir, g''aznachi va HR da (boshqa rollar — hech qayerda)',
   coalesce((select string_agg(m.who || ':' || m.tbl || '.' || m.op, ',' order by m.who, m.tbl, m.op) from zz.mx m
              where m.op in ('I', 'U', 'D') and m.who not in ('dir', 'fm', 'kas', 'trs', 'hr') and zz.cell(m.op, m.got) <> '-'), ''), '^$');
-select zz.chk('M45 ota-ona: fakturalar, avans va avans jurnalida faqat o''z farzandi (boshqa o''quvchi ko''rinmaydi)',
+select zz.chk('Q5 ota-ona: fakturalar, avans va avans jurnalida faqat o''z farzandi (boshqa o''quvchi ko''rinmaydi)',
   zz.probe('U_PAR', $q$select string_agg(distinct "studentId", ',') from public.invoices$q$, true) || '|'
   || zz.probe('U_PAR', $q$select string_agg(distinct "studentId", ',') from public.student_credit$q$, true) || '|'
   || zz.probe('U_PAR', $q$select string_agg(distinct "studentId", ',') from public.credit_ledger$q$, true), '^IQ-M01\|IQ-M01\|IQ-M01$');

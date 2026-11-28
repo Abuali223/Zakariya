@@ -106,8 +106,13 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          public.fin_pay_cancel («🚫 Bekor»), public.fin_pay_rev_done («✓ Bajarildi»), public.fin_guard_report, kassa_checks.direct
 --          (app.fin_guard_brief), public.fin_marketing_spend (RF-12; exp_sel — marketingsiz); RF-11 g'aznachi = kassa operatori
 --          (app.is_finance / app.is_cashier); credit_ledger cl_ins — faqat Direktor; fin_org.extra o'zgarishlar tarixida.
+--     27 — 2-bosqich F2.3 (fin-class.sql): noyabr–yanvar «Buxgalteriya» eski xarajatlariga statiya — public.fin_exp_class_list,
+--          public.fin_exp_classify (buxgalter, Moliya menejeri, Direktor: yozuvga bitta statiya, summa / sana o'zgarmaydi; yopilgan davr —
+--          fin:locked), public.fin_exp_class_sign (buxgalter imzosi; keyin o'zgarsa — eskirgan), jurnal public.fin_exp_class va imzolar
+--          public.fin_exp_class_sign (faqat qo'shiladi — trg_fin_class_guard); RP-09: shu oylarda «taxminiy» — tasdiqlanmagan yozuv,
+--          oylar holati — fin_matrix.classify (app.fin_class_stats).
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 26 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 27 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;

@@ -38,7 +38,7 @@ run(){   # kN | pay:dev|prod | legacy:dev|prod | ar | sl | ui
   esac
 }
 if [ $# -gt 0 ]; then SPECS=("$@"); else
-  SPECS=(); for n in 5 3 1 2 4 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28; do SPECS+=("k$n"); done
+  SPECS=(); for n in 5 3 1 2 4 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29; do SPECS+=("k$n"); done
   SPECS+=(pay:dev legacy:dev pay:prod legacy:prod ar sl ui)
 fi
 for s in "${SPECS[@]}"; do run "$s"; done

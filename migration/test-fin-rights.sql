@@ -329,7 +329,7 @@ select zz.chk('L1 buxgalterga true yordamchilar', (select string_agg(proname, ',
 select zz.chk('L2 YOPIQ RO''YXAT: buxgalterni o''tkazadigan siyosatlar jadvallari',
   (select string_agg(distinct p.tablename, ',' order by p.tablename) from pg_policies p, zz_acc_re
     , zz_acc_re2 where p.schemaname = 'public' and p.cmd in ('SELECT', 'ALL') and (coalesce(p.qual, '') ~ zz_acc_re.re or coalesce(p.qual, '') ~ zz_acc_re2.re)),
-  '^cash_counts,cash_day_events,cash_days,cash_desks,cash_doc_files,cash_doc_fixes,cash_doc_lines,cash_doc_verify,cash_docs,cash_handovers,cash_prints,config,credit_ledger,expenses,fin_articles,fin_category_map,fin_counterparties,fin_exp_docs,fin_op_rules,fin_org,fin_signatories,gl_accounts,payment_allocations,payroll_runs,staff_advances,student_credit$');
+  '^cash_counts,cash_day_events,cash_days,cash_desks,cash_doc_files,cash_doc_fixes,cash_doc_lines,cash_doc_verify,cash_docs,cash_handovers,cash_prints,config,credit_ledger,expenses,fin_articles,fin_category_map,fin_counterparties,fin_exp_class,fin_exp_class_sign,fin_exp_docs,fin_op_rules,fin_org,fin_signatories,gl_accounts,payment_allocations,payroll_runs,staff_advances,student_credit$');
 select zz.chk('L2w YOPIQ RO''YXAT: buxgalterni o''tkazadigan YOZISH siyosati yo''q (INSERT / UPDATE / DELETE / ALL; USING va WITH CHECK)',
   (select coalesce(string_agg(distinct p.tablename || ':' || p.cmd, ','), '') from pg_policies p, zz_acc_re, zz_acc_re2
     where p.schemaname = 'public' and p.cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')
@@ -360,7 +360,7 @@ with recursive node as (
 ) select distinct c.proname from clo c join node n on n.oid = c.oid where n.rpc;
 select zz.chk('L4 YOPIQ RO''YXAT: buxgalterni o''tkazadigan mijoz RPC''lari (matn + chaqiruvlar zanjiri)',
   (select string_agg(proname, ',' order by proname) from zz_l4),
-  '^claim_child,fin_counterparty_confirm,fin_counterparty_save,fin_cp_save,fin_cp_statement,fin_exp_refs,fin_matrix,fin_snapshot_get,fin_snapshots_list,finance_other_income,kassa_acc_card,kassa_adv_report,kassa_adv_report_void,kassa_book_cover,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_files,kassa_doc_files_add,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_fix_cancel,kassa_fix_get,kassa_fix_list,kassa_fix_request,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_check,kassa_month_pack,kassa_overview,kassa_pay_sheet,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
+  '^claim_child,fin_counterparty_confirm,fin_counterparty_save,fin_cp_save,fin_cp_statement,fin_exp_class_list,fin_exp_class_sign,fin_exp_classify,fin_exp_refs,fin_matrix,fin_snapshot_get,fin_snapshots_list,finance_other_income,kassa_acc_card,kassa_adv_report,kassa_adv_report_void,kassa_book_cover,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_files,kassa_doc_files_add,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_fix_cancel,kassa_fix_get,kassa_fix_list,kassa_fix_request,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_check,kassa_month_pack,kassa_overview,kassa_pay_sheet,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
 select zz.chk('L5 rls-initplan: buxgalter siyosatlari o''ralgan (o''ralmagan app.* chaqiruvi — faqat users)',
   (select coalesce(string_agg(distinct tablename, ','), '') from pg_policies where schemaname = 'public'
      and (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '(?<!SELECT )app\.(is_accountant|kassa_reader|fin_list2)\(\)'), '^$');
@@ -399,7 +399,7 @@ select (select count(*) from zz_l4b) || ':' || coalesce((select string_agg(prona
 rollback to savepoint zz_l4b_sp;
 select zz.chk('L4b YOPIQ RO''YXAT (xatti-harakat): buxgalterga boshqacha javob beradigan RPC''lar (oldida — tekshirilgan RPC''lar soni)',
   :'zz_l4b_res',
-  '^[0-9]{2,}:claim_child,fin_counterparty_confirm,fin_counterparty_save,fin_cp_save,fin_cp_statement,fin_exp_refs,fin_matrix,fin_snapshot_get,fin_snapshots_list,finance_other_income,kassa_acc_card,kassa_adv_report,kassa_adv_report_void,kassa_book_cover,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_files,kassa_doc_files_add,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_fix_cancel,kassa_fix_get,kassa_fix_list,kassa_fix_request,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_check,kassa_month_pack,kassa_overview,kassa_pay_sheet,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
+  '^[0-9]{2,}:claim_child,fin_counterparty_confirm,fin_counterparty_save,fin_cp_save,fin_cp_statement,fin_exp_class_list,fin_exp_class_sign,fin_exp_classify,fin_exp_refs,fin_matrix,fin_snapshot_get,fin_snapshots_list,finance_other_income,kassa_acc_card,kassa_adv_report,kassa_adv_report_void,kassa_book_cover,kassa_checks,kassa_day_book,kassa_day_verify,kassa_doc_approve,kassa_doc_cancel,kassa_doc_files,kassa_doc_files_add,kassa_doc_get,kassa_doc_reject,kassa_doc_void,kassa_fix_cancel,kassa_fix_get,kassa_fix_list,kassa_fix_request,kassa_journal,kassa_journal_export,kassa_kpi,kassa_matrix,kassa_month_check,kassa_month_pack,kassa_overview,kassa_pay_sheet,kassa_people,kassa_print_mark,kassa_refs,kassa_state$');
 
 -- ---------- (P) pul va yozish RPC'lari: buxgalter (va eski qo'shimchali buxgalter) — 42501 ----------
 create temp table zz_money on commit drop as
