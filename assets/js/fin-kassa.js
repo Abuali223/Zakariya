@@ -11,7 +11,7 @@
 // =====================================================================
 let C = null;                                   // admin.html bergan yordamchilar (ctx)
 const ST = { desk: 'main', ov: null, refs: null, people: null, students: null, checks: null };
-const SERVER_VER = 24;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
+const SERVER_VER = 25;                           // shu sahifa kutadigan server relizi (migration/fin-version.sql: app.kassa_version) — birga oshiriladi
 const NOMINALS = [200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 const PARTY_LBL = { student: 'O‘quvchi (to‘lovchi)', employee: 'Xodim', counterparty: 'Kontragent', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa (yoziladi)' };
 const CP_KIND = { supplier: 'Yetkazib beruvchi', org: 'Tashkilot', person: 'Jismoniy shaxs', bank: 'Bank', founder: 'Ta’sischi', other: 'Boshqa' };
@@ -65,8 +65,31 @@ export function advApproveText(d) {
   const o = advOver(d);
   return `Avans hisoboti tasdiqlansinmi?\n\n${(d && d.partyName) || ''} — ${som(d && d.amount)}\n\nTasdiq bilan o‘tkaziladi («A-» raqami): xarajatlar «Buxgalteriya»ga ko‘chadi, hisobdordagi avans qoldig‘i kamayadi.`
     + (o > 0 ? `\nOrtiqcha sarf ${som(o)} — hisobdorga qarzimiz: kassadan «Ortiqcha sarfni qoplash» chiqim orderi bilan beriladi.` : '')
+    + (d && d.filesN != null ? `\nCheklar surati: ${num(d.filesN) ? num(d.filesN) + ' ta (ko‘rish — «📎» tugmasi)' : 'biriktirilmagan'}.` : '')
     + '\n\nCheklarni qog‘ozdagi hisobot bilan solishtiring.';
 }
+// F2.6b: avans hisoboti cheklari surati — yopiq «receipts» bucket (server: kassa.sql siyosatlari, kassa_adv_report.files, kassa_doc_files_add).
+//   Tur va hajm — bucket qoidasi bilan bir xil (JPEG / PNG / PDF, 5 MB gacha); yo'l — adv/<uuid>.<kengaytma>; hujjatda 20 tagacha. Sof funksiyalar
+//   (fin-kassa.test.mjs). Qo'shish — 2-ro'yxat yoki Direktor, hisobdorning o'zi emas; bekor qilingan / rad etilgan hisobotga — yo'q.
+export const RECEIPT_MAX = 5 * 1024 * 1024;
+export const RECEIPT_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'application/pdf': 'pdf' };
+export function receiptCheck(f) {   // → null (yaroqli) yoki xato matni
+  if (!f) return 'Fayl tanlanmagan';
+  const nm = `«${f.name || 'fayl'}»`;
+  if (!RECEIPT_TYPES[f.type]) return `${nm} — faqat rasm (JPEG, PNG) yoki PDF`;
+  if (!(f.size > 0)) return `${nm} — bo‘sh fayl`;
+  if (f.size > RECEIPT_MAX) return `${nm} — 5 MB dan katta (rasmni kichikroq qilib qayta tanlang)`;
+  return null;
+}
+export function uuid4(bytes) {   // tasodifiy UUID (4-versiya); bytes — 16 bayt (sinovda), aks holda crypto.getRandomValues
+  const b = bytes || crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+export const receiptPath = (type, id) => `adv/${id}.${RECEIPT_TYPES[type]}`;
+export const canAddAdvFiles = (d, m) => !!(d && m && d.op === 'nc_adv_report' && (d.status === 'draft' || d.status === 'posted') && (m.list2 || m.director)
+  && !(d.partyId && (m.cards || []).includes(d.partyId)));
 // RP-07 kartochkasidagi hujjatlar (server tartibida): 4230 (hisobot qilinmagan avans) va 6970 (hisobdorga qarzimiz) ta'siri va ketma-ket qoldiqlar.
 //   Avans +4230; qaytim va avans hisobotining 4230 qismi −4230; hisobotning ortiqcha sarf qismi +6970; «Ortiqcha sarfni qoplash» −6970.
 export function accCardRows(card) {
@@ -242,6 +265,8 @@ const newRef = () => 'ks-' + Date.now().toString(36) + '-' + Math.random().toStr
 const errText = e => String((e && (e.message || e.code)) || e || 'xato');
 const nameOf = uid => (uid && ST.ov && ST.ov.names && ST.ov.names[uid]) || (uid ? '…' : '—');
 const me = () => (ST.ov && ST.ov.state && ST.ov.state.me) || {};
+// F2.6b: cheklar surati — server 25-reliz va undan keyin, sahifada saqlash funksiyalari bo'lsa (admin.html: finCtx receiptPut / receiptUrl)
+const filesOn = () => Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 25 && typeof C.receiptUrl === 'function';
 const rule = op => ((ST.refs && ST.refs.rules) || []).find(r => r.op === op) || null;
 const opName = op => { const r = rule(op); return r ? r.nameUz : op; };
 const artName = id => { const a = ((ST.refs && ST.refs.articles) || []).find(x => x.id === id); return a ? a.nameUz : (id || ''); };
@@ -507,7 +532,7 @@ function draw() {
       <td data-label="${adv ? 'Hisobdor' : d.form === 'KO1' ? 'Kimdan' : 'Kimga'}">${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || (d.noBasis ? 'asos hujjatisiz' : ''))}</div></td>
       <td data-label="Summa" style="text-align:right;white-space:nowrap"><b>${esc(som(d.amount))}</b></td>
       <td data-label="Holat">${stChip(d.status)}<div class="small muted">so‘radi: ${esc(nameOf(d.requestedBy))}</div><div class="small muted">${esc(need.join(' · '))}</div></td>
-      <td data-label="" style="white-space:nowrap">${canAppr ? `<button class="btn sm gold" data-appr="${esc(d.id)}">Tasdiqlash</button> ` : ''}${canPay ? `<button class="btn sm gold" data-pay="${esc(d.id)}">${d.form === 'KO1' ? 'Qabul qilish' : 'Pulni berish'}</button> ` : ''}${canRej ? `<button class="btn sm danger" data-rej="${esc(d.id)}">Rad etish</button> ` : ''}${canCancel ? `<button class="btn sm" data-cancel="${esc(d.id)}">Bekor qilish</button>` : ''}</td></tr>`;
+      <td data-label="" style="white-space:nowrap">${adv && filesOn() && (m.list2 || m.director) ? `<button class="btn sm" data-advfiles="${esc(d.id)}" title="Cheklar surati">📎${num(d.filesN) ? ' ' + esc(String(num(d.filesN))) : ''}</button> ` : ''}${canAppr ? `<button class="btn sm gold" data-appr="${esc(d.id)}">Tasdiqlash</button> ` : ''}${canPay ? `<button class="btn sm gold" data-pay="${esc(d.id)}">${d.form === 'KO1' ? 'Qabul qilish' : 'Pulni berish'}</button> ` : ''}${canRej ? `<button class="btn sm danger" data-rej="${esc(d.id)}">Rad etish</button> ` : ''}${canCancel ? `<button class="btn sm" data-cancel="${esc(d.id)}">Bekor qilish</button>` : ''}</td></tr>`;
   }).join('');
   const reqHtml = reqs.length ? `<div class="card" style="padding:14px 18px;margin-bottom:14px"><b>So‘rovlar (pul hali berilmagan / qabul qilinmagan) va tasdiq kutayotgan avans hisobotlari</b><div class="small muted" style="margin:2px 0 8px">Chiqim faqat tasdiqdan keyin beriladi: 2-ro‘yxat (Moliya menejeri / buxgalter), ${esc(som(s.t1))}dan katta summada — Direktor ham. Avans hisobotini kirituvchidan boshqa 2-ro‘yxat xodimi yoki Direktor tasdiqlaydi — tasdiq bilan o‘tkaziladi.</div>
     <div class="tablewrap"><table><thead><tr><th>Tur</th><th>Operatsiya</th><th>Kimdan / kimga</th><th style="text-align:right">Summa</th><th>Holat</th><th></th></tr></thead><tbody>${reqRows}</tbody></table></div></div>` : '';
@@ -573,7 +598,7 @@ function draw() {
       <td data-label="Tomon / asos"><div>${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || '')}</div></div></td>
       <td data-label="Summa" style="text-align:right;white-space:nowrap">${v ? '<s>' + esc(som(d.amount)) + '</s>' : '<b>' + esc(som(d.amount)) + '</b>'}</td>
       <td data-label="Holat">${v ? stChip('void') + (d.voidReason ? `<div class="small muted">${esc(d.voidReason)}</div>` : '') : `<span class="small muted">${esc(d.postedByName || nameOf(d.postedBy))}</span>`}</td>
-      <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Dalolatnomani chop etish">🖨</button>${canVoid ? ` <button class="btn sm danger" data-ofsvoid="${esc(d.id)}">Bekor</button>` : ''}${canVoidAdv ? ` <button class="btn sm danger" data-advvoid="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`; }).join('');
+      <td data-label="" style="white-space:nowrap"><button class="btn sm" data-print="${esc(d.id)}" title="Dalolatnomani chop etish">🖨</button>${d.op === 'nc_adv_report' && filesOn() && (m.list2 || m.director) ? ` <button class="btn sm" data-advfiles="${esc(d.id)}" title="Cheklar surati">📎${num(d.filesN) ? ' ' + esc(String(num(d.filesN))) : ''}</button>` : ''}${canVoid ? ` <button class="btn sm danger" data-ofsvoid="${esc(d.id)}">Bekor</button>` : ''}${canVoidAdv ? ` <button class="btn sm danger" data-advvoid="${esc(d.id)}">Bekor</button>` : ''}</td></tr>`; }).join('');
   const actsHtml = actDocs.length ? `<div class="card" style="padding:14px 18px;margin-top:14px" id="ks-acts"><b>Naqdsiz dalolatnomalar</b><div class="small muted" style="margin:2px 0 8px">Kassa kitobiga kirmaydi: boshlang‘ich qoldiq, kamomad bo‘yicha qaror, o‘zaro hisob (ish haqidan o‘quv to‘lovi — «Maosh berish» oynasida, faqat Direktor), avans hisoboti. Oxirgi 3 oy.</div>
     <div class="tablewrap"><table><thead><tr><th>№</th><th>Tur</th><th>Tomon / asos</th><th style="text-align:right">Summa</th><th>Holat</th><th></th></tr></thead><tbody>${actRows}</tbody></table></div></div>` : '';
   $('#ks-body').innerHTML = warnHtml + hoHtml + top + docsHtml + reqHtml + shHtml + ctlHtml + daysHtml + actsHtml;
@@ -626,6 +651,7 @@ function bind() {
       r => act('kassa_handover_cancel', { p_id: id, p_reason: r }, rej ? 'Smena qabul qilinmadi (rad etildi)' : 'Smena topshirish bekor qilindi')); });
   each('data-ofsvoid', id => ask('O‘zaro hisobni bekor qilish', 'Sababi (kamida 5 belgi). O‘quv to‘lovi teskari qilinadi, maosh to‘lovi olib tashlanadi; dalolatnoma raqami saqlanadi. Faqat rasmiylashtirilgan kunning o‘zida.', 5,
     r => act('kassa_offset_void', { p_id: id, p_reason: r }, 'O‘zaro hisob bekor qilindi')));
+  each('data-advfiles', id => { const d = (ST.ov.requests || []).concat(ST.ov.acts || []).find(x => x.id === id); if (d) openAdvFiles(d); });
   each('data-advvoid', id => ask('Avans hisobotini bekor qilish', 'Sababi (kamida 5 belgi). Xarajatlar «Buxgalteriya»dan olib tashlanadi, hisobdordagi qoldiq tiklanadi; dalolatnoma raqami saqlanadi. Faqat kiritilgan kunning o‘zida.', 5,
     r => act('kassa_adv_report_void', { p_id: id, p_reason: r }, 'Avans hisoboti bekor qilindi')));
   bindControl($('#ks-ctl'));   // nazorat ro'yxati (oldingi yuklash ma'lumoti bilan chizilgan bo'lsa)
@@ -687,7 +713,8 @@ async function openAdvForm() {
   if (!acc.length) { C.toast('Hisobot qilinmagan avansi bor hisobdor yo‘q', true); return; }
   const arts = advArticles(refs);
   const today = ST.ov.state.today;
-  const F = { ref: null, lines: [{ articleId: '', amount: '', note: '' }] };
+  const F = { ref: null, lines: [{ articleId: '', amount: '', note: '' }], files: [] };
+  const filesOk = filesOn() && typeof C.receiptPut === 'function';   // F2.6b: cheklar surati
   $('#modal').innerHTML = `<div class="modal-h"><h3>Avans hisoboti</h3><button class="x" id="m-x">×</button></div>
     <div class="modal-b">
       <div class="small muted">Hisobdor topshirgan qog‘oz hisobot va cheklar bo‘yicha. Har qator — bitta chek yoki hujjat. Kiritilgan hisobot <b>tasdiq kutadi</b>: boshqa 2-ro‘yxat xodimi (Moliya menejeri / buxgalter) yoki Direktor tasdiqlagach o‘tkaziladi — xarajat «Buxgalteriya»ga ko‘chadi, hisobdordagi qoldiq kamayadi.</div>
@@ -696,6 +723,9 @@ async function openAdvForm() {
       <div class="small" style="font-weight:700;margin-top:10px">Xarajatlar <span class="muted" style="font-weight:500">— statiya, summa, chek yoki hujjat</span></div>
       <div id="av-lines"></div><button type="button" class="btn sm" id="av-add" style="margin-top:6px">+ qator</button>
       <div class="small" id="av-sum" style="margin-top:8px"></div>
+      ${filesOk ? `<div class="small" style="font-weight:700;margin-top:12px">Cheklar surati <span class="muted" style="font-weight:500">— ixtiyoriy: rasm (JPEG, PNG) yoki PDF, har biri 5 MB gacha, 20 tagacha; qog‘oz cheklar baribir buxgalteriyaga topshiriladi</span></div>
+      <input id="av-files" type="file" accept="image/jpeg,image/png,application/pdf" multiple style="margin-top:6px;max-width:100%">
+      <div id="av-flist" class="small" style="margin-top:4px"></div>` : ''}
     </div>
     <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Bekor</button><button type="button" class="btn gold" id="av-save">Tasdiqqa yuborish</button></div>`;
   C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
@@ -713,6 +743,18 @@ async function openAdvForm() {
     $('#av-lines').querySelectorAll('[data-adel]').forEach(el => el.onclick = () => { F.lines.splice(Number(el.dataset.adel), 1); draw(); sum(); });
   };
   draw(); sum();
+  // F2.6b: tanlangan cheklar surati — saqlashda yuklanadi (yuklangani qayta yuklanmaydi: xato bo'lsa qayta yuborishda o'sha yo'l bilan)
+  const drawFiles = () => { const el = $('#av-flist'); if (!el) return;
+    el.innerHTML = F.files.map((x, i) => `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">📎 <span style="overflow-wrap:anywhere">${esc(x.name)}</span><span class="muted">${esc((x.file.size / 1048576).toFixed(1))} MB${x.path ? ' · yuklangan' : ''}</span><button type="button" class="btn sm" data-fdel="${i}" title="Olib tashlash">×</button></div>`).join('');
+    el.querySelectorAll('[data-fdel]').forEach(b => b.onclick = () => { F.files.splice(Number(b.dataset.fdel), 1); drawFiles(); }); };
+  const fin = $('#av-files');
+  if (fin) fin.onchange = () => {
+    for (const f of Array.from(fin.files || [])) {
+      const er = receiptCheck(f); if (er) { C.toast(er, true); continue; }
+      if (F.files.length >= 20) { C.toast('Bitta hisobotga 20 tadan ortiq fayl biriktirilmaydi', true); break; }
+      F.files.push({ file: f, name: String(f.name || '').slice(0, 120), path: null });
+    }
+    fin.value = ''; drawFiles(); };
   // hisobdor tanlanganda — yopilmagan avanslari (FIFO) va avans maqsadi: birinchi qator statiyasi shundan taklif qilinadi (bo'sh bo'lsa)
   let cardSeq = 0;
   $('#av-p').onchange = async () => {
@@ -736,12 +778,59 @@ async function openAdvForm() {
     const over = advSplit(bal(), ls).over;
     if (over > 0 && !confirm(`Hisobot qoldiqdan ${som(over)} katta.\n\nOrtiqcha sarf hisobdorga qarzimiz (6970) bo‘lib yoziladi va tasdiqdan keyin kassadan «Ortiqcha sarfni qoplash» chiqim orderi bilan beriladi. Davom etilsinmi?`)) return;
     busy = true; $('#av-save').disabled = true;
-    const r = await act('kassa_adv_report', { p: { clientRef: F.ref || (F.ref = newRef()), partyId: pid, reportDate: $('#av-d').value, basis: $('#av-b').value.trim(), lines: ls } },
+    if (filesOk && F.files.some(x => !x.path)) {
+      const sb = $('#av-save'); sb.textContent = 'Fayllar yuklanmoqda…';
+      try { for (const x of F.files) if (!x.path) { const pth = receiptPath(x.file.type, uuid4()); await C.receiptPut(pth, x.file, x.file.type); x.path = pth; drawFiles(); } }
+      catch (e) { busy = false; sb.disabled = false; sb.textContent = 'Tasdiqqa yuborish'; C.toast('Chek suratini yuklab bo‘lmadi: ' + errText(e) + '. Qayta yuboring — yuklanganlari qayta yuklanmaydi', true); return; }
+      sb.textContent = 'Tasdiqqa yuborish';
+    }
+    const r = await act('kassa_adv_report', { p: { clientRef: F.ref || (F.ref = newRef()), partyId: pid, reportDate: $('#av-d').value, basis: $('#av-b').value.trim(), lines: ls,
+        ...(filesOk ? { files: F.files.map(x => ({ path: x.path, name: x.name })) } : {}) } },
       x => x && x.status === 'posted' ? 'Avans hisoboti' : 'Avans hisoboti kiritildi — tasdiq kutmoqda (boshqa 2-ro‘yxat xodimi yoki Direktor)', null, refMismatch);
     if (!r) { busy = false; const b = $('#av-save'); if (b) b.disabled = false; }
   };
 }
 const offerAdvPrint = r => { if (r && r.id && r.status === 'posted' && confirm('Avans hisoboti chop etilsinmi?')) printDoc(r.id); };
+// F2.6b: avans hisoboti cheklari surati — ro'yxat (asl nomi, kim va qachon qo'shgan), ochish (imzolangan havola, 2 daqiqa) va keyin qo'shish
+//   (masalan, chek keyin topildi; tasdiq kutayotgan yoki o'tkazilgan hisobotga). Ko'radi va qo'shadi — 2-ro'yxat va Direktor (hisobdor emas).
+async function openAdvFiles(d, onChanged) {   // onChanged — fayl qo'shilgach (masalan, «Tasdiqlash» bo'limini qayta chizish); yo'q bo'lsa — kassa sahifasi
+  const canAdd = canAddAdvFiles(d, me()) && typeof C.receiptPut === 'function';
+  $('#modal').innerHTML = `<div class="modal-h"><h3>Cheklar surati — ${esc(d.partyName || '')}</h3><button class="x" id="m-x">×</button></div>
+    <div class="modal-b"><div class="small muted">Avans hisoboti${d.no ? ' A-' + esc(String(d.no)) : ''}, ${esc(som(d.amount))}${d.status === 'draft' ? ' (tasdiq kutmoqda)' : ''}. Fayllar faqat qo‘shiladi (o‘chirilmaydi); ochish havolasi 2 daqiqa amal qiladi.</div>
+      <div id="af-list" style="margin-top:8px"><div class="loading">Yuklanmoqda…</div></div>
+      ${canAdd ? `<div class="small" style="font-weight:700;margin-top:12px">Fayl qo‘shish <span class="muted" style="font-weight:500">— rasm (JPEG, PNG) yoki PDF, har biri 5 MB gacha</span></div>
+      <input id="af-files" type="file" accept="image/jpeg,image/png,application/pdf" multiple style="margin-top:6px;max-width:100%">` : ''}</div>
+    <div class="modal-f"><button type="button" class="btn ghost" id="m-cancel">Yopish</button>${canAdd ? '<button type="button" class="btn gold" id="af-add">Qo‘shish</button>' : ''}</div>`;
+  C.openModal(); $('#m-x').onclick = C.closeModal; $('#m-cancel').onclick = C.closeModal;
+  const draw = r => { const el = $('#af-list'); if (!el) return; const fs = (r && r.files) || [];
+    el.innerHTML = fs.length ? `<div class="tablewrap"><table id="af-table"><thead><tr><th>Fayl — kim qo‘shgan</th><th></th></tr></thead><tbody>${fs.map(f => `<tr>
+      <td data-label="Fayl" style="overflow-wrap:anywhere">${esc(f.name || String(f.path || '').split('/').pop())}<div class="small muted">${esc(f.addedByName || '—')} · ${esc(dmy(tkDate(f.addedAt)))}</div></td>
+      <td data-label="" style="text-align:right;white-space:nowrap"><button class="btn sm" data-fopen="${esc(f.path)}">Ochish</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="small muted">Hali fayl biriktirilmagan.</div>';
+    el.querySelectorAll('[data-fopen]').forEach(b => b.onclick = async () => {
+      const w = window.open('', '_blank');   // qalqib chiquvchi oyna bloklanmasin — havola kelguncha bo'sh oyna (bosish paytida ochiladi)
+      try { const u = await C.receiptUrl(b.dataset.fopen); if (w) { w.opener = null; w.location.href = u; } else window.open(u, '_blank', 'noopener'); }
+      catch (e) { if (w) w.close(); C.toast('Faylni ochib bo‘lmadi: ' + errText(e), true); } }); };
+  let r; try { r = await call('kassa_doc_files', { p_id: d.id }); }
+  catch (e) { const el = $('#af-list'); if (el) el.innerHTML = `<div class="empty">${esc(errText(e))}</div>`; return; }
+  draw(r);
+  if (!canAdd) return;
+  let busy = false;
+  $('#af-add').onclick = async () => {
+    if (busy) return;
+    const picked = Array.from(($('#af-files') && $('#af-files').files) || []);
+    if (!picked.length) { C.toast('Fayl tanlang', true); return; }
+    for (const f of picked) { const er = receiptCheck(f); if (er) { C.toast(er, true); return; } }
+    busy = true; const b = $('#af-add'); b.disabled = true; b.textContent = 'Yuklanmoqda…';
+    try {
+      const files = [];
+      for (const f of picked) { const pth = receiptPath(f.type, uuid4()); await C.receiptPut(pth, f, f.type); files.push({ path: pth, name: String(f.name || '').slice(0, 120) }); }
+      const x = await call('kassa_doc_files_add', { p_id: d.id, p_files: files });
+      C.toast(`Cheklar surati qo‘shildi: ${num(x && x.added)} ta ✓`); const fi = $('#af-files'); if (fi) fi.value = ''; draw(x);
+      await (onChanged ? onChanged() : reload()).catch(() => {});
+    } catch (e) { C.toast(errText(e), true); }
+    busy = false; const b2 = $('#af-add'); if (b2) { b2.disabled = false; b2.textContent = 'Qo‘shish'; }
+  };
+}
 // So'rov qatorlari matni: avans hisobotida — har qator (statiya, summa; ortiqcha sarf qismi belgilanadi), boshqa so'rovlarda — statiyalar
 const reqLineTxt = d => d && d.op === 'nc_adv_report'
   ? (d.lines || []).map(l => `${artName(l.articleId) || l.articleId} — ${som(l.amount)}${l.credit === '6970' ? ' (ortiqcha sarf)' : ''}`).join('; ')
@@ -756,7 +845,7 @@ async function openAccList() {
   C.openModal(); $('#m-x').onclick = C.closeModal;
   let r; try { r = await call('kassa_acc_card', { p_party: null }); } catch (e) { C.toast(errText(e), true); C.closeModal(); return; }
   const L = (r && r.list) || [], b = $('#modal').querySelector('.modal-b'); if (!b) return;
-  b.innerHTML = `<div class="small muted">Hisobot qilinmagan avans (4230), hisobdorga qarzimiz — avans hisobotidagi ortiqcha sarf (6970), tasdiq kutayotgan hisobot. Avans hisoboti muddati — 3 ish kuni (maktabning dam olish kunlari sanalmaydi).</div>
+  b.innerHTML = `<div class="small muted">Hisobot qilinmagan avans (4230), hisobdorga qarzimiz — avans hisobotidagi ortiqcha sarf (6970), tasdiq kutayotgan hisobot. Avans hisoboti muddati — ${esc(String(num(r && r.advDays) || 3))} ish kuni (maktabning dam olish va bayram kunlari sanalmaydi; Direktor — «⚙ Sozlamalar»).</div>
     ${L.length ? `<div class="tablewrap" style="margin-top:8px"><table id="acc-list"><thead><tr><th>Xodim</th><th style="text-align:right">Qoldiq (4230)</th><th style="text-align:right">Qarzimiz (6970)</th><th>Eng eski yopilmagan avans</th><th></th></tr></thead><tbody>${L.map(x => `<tr data-accrow="${esc(x.partyId)}">
       <td data-label="Xodim"><b>${esc(x.name || x.partyId)}</b>${x.pending ? '<div class="small" style="color:#175CD3">hisoboti tasdiq kutmoqda</div>' : ''}</td>
       <td data-label="Qoldiq (4230)" style="text-align:right;white-space:nowrap">${num(x.open) ? esc(som(x.open)) : '—'}</td>
@@ -1413,6 +1502,7 @@ function openSettings() {
   const o = ST.refs.org || {}, ex = o.extra || {};
   const depDays = Array.isArray(ex.depositDays) ? ex.depositDays.map(Number) : [5];   // kalit yo'q — juma (server bilan bir xil)
   const depOk = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 16;      // inkassatsiya jadvali — server 16-reliz va undan keyin
+  const advOk = Number((ST.ov && ST.ov.state && ST.ov.state.version) || 0) >= 25;      // F2.6b: avans hisoboti muddati va bloklash
   const v = k => esc(o[k] == null ? '' : String(o[k]));
   const nv = k => esc(num(o[k]) ? String(num(o[k])).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '');
   $('#modal').innerHTML = `<div class="modal-h"><h3>Kassa sozlamalari</h3><button class="x" id="m-x">×</button></div>
@@ -1429,6 +1519,8 @@ function openSettings() {
       <div class="small muted" style="margin-top:4px" id="kx-limhint">${esc(limitHintTxt(((ST.ov && ST.ov.state && ST.ov.state.deposit) || {}).limitHint))}</div>` : ''}
       ${lbl('Yuridik shaxsga (yetkazib beruvchi / tashkilot) kassadan naqd to‘lov — Direktor tasdig‘isiz chegara (0 — har doim Direktor)', `<input id="kx-orgmax" type="text" inputmode="numeric" value="${esc(num((o.extra || {}).orgCashMax) ? String(num(o.extra.orgCashMax)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '')}" placeholder="0" style="${FLD}">`)}
       <div class="small muted" style="margin-top:4px">Yuridik shaxslar bilan hisob-kitob asosan bank orqali (yoki hisobdor shaxs — avans hisoboti bilan); chegarani buxgalter hisob siyosatida tasdiqlaydi.</div>
+      ${advOk ? `<div class="grid2">${lbl('Avans hisoboti muddati (maktab ish kunlari, 1–30)', `<input id="kx-advdays" type="number" inputmode="numeric" min="1" max="30" step="1" value="${esc(String(num(ex.advDays) || 3))}" style="${FLD}">`)}${lbl('Muddati o‘tganda', `<label class="small" style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="kx-advblock" style="${CHK}"${ex.advBlock === true ? ' checked' : ''}> yangi avans berilmasin (bloklash)</label>`)}</div>
+      <div class="small muted" style="margin-top:4px">Hisobdor avans olgan kundan keyin shu muddatda avans hisobotini topshiradi (FD-14: 3 ish kuni; dam olish va «Bayram / ta’til kunlari» sanalmaydi). Bloklash yoqilsa — muddati o‘tgan avansi bor xodimga yangi «Hisobdorga avans» so‘rovi ham, pul berish ham rad etiladi; o‘chiq bo‘lsa — faqat ogohlantirish (nazorat ro‘yxati, RP-07).</div>` : ''}
       <div class="small muted" style="margin-top:8px">«Ishga tushadigan kun»dan boshlab har naqd o‘quv to‘lovi kassa kirim orderi bilan yoziladi: fiskal chek raqami majburiy bo‘ladi, naqd pulni faqat kassir qabul qiladi, kecha yopilmagan bo‘lsa to‘lov qabul qilinmaydi. Bo‘sh qoldirilsa — hozirgidek. Kassa ishlagandan keyin sanani bo‘shatish yoki surish — kassani <b>to‘xtatish</b> (ishga-tushirish §9: ochiq kun, qurilma navbatida qolgan yozuvlar bilan yopilgan oxirgi kun va pul berilmagan so‘rovlar bo‘lmasligi kerak); qayta ishga tushirish — komissiya sanashi bilan («Qayta ishga tushirish»).</div>
       <div class="small" style="font-weight:700;margin-top:16px">Imzo egalari (chop etiladigan hujjatlarda)</div>
       <div class="small muted" style="margin-top:4px">1-ro‘yxat — rahbar; 2-ro‘yxat — bosh buxgalter / moliya. Ro‘yxatda bitta shaxs bo‘lsa — hujjatga o‘zi yoziladi; bir nechta bo‘lsa — hujjatni tizimda tasdiqlagan shaxs, agar uning hisobi shu ro‘yxatdagi biriga bog‘langan bo‘lsa (shu yerdagi to‘liq F.I.Sh. bilan); aks holda F.I.Sh. qo‘lda yoziladi. Qo‘shish va o‘chirish darhol saqlanadi.</div>
@@ -1472,6 +1564,8 @@ function openSettings() {
     const nums = {};   // ui-6: chegaralar — amtRead qoidasi bilan (ajratkich jim tashlanmaydi)
     for (const [k, sel] of [['t1', '#kx-t1'], ['l1', '#kx-l1'], ['cashLimit', '#kx-limit'], ['orgCashMax', '#kx-orgmax']].concat(depOk ? [['depositKeep', '#kx-keep']] : [])) {
       const r = amtRead($(sel).value); if (r.err) { C.toast(r.err, true); $(sel).focus(); return; } nums[k] = num(r.v); }
+    let advDays = null;
+    if (advOk) { advDays = Number($('#kx-advdays').value); if (!Number.isInteger(advDays) || advDays < 1 || advDays > 30) { C.toast('Avans hisoboti muddati — 1 dan 30 gacha butun son (ish kunlari)', true); $('#kx-advdays').focus(); return; } }
     const live = $('#kx-live').value || null;
     // ui-5: kelgan sanani bo'shatish / surish — kassani to'xtatish (alohida, oqibatlari yozilgan tasdiq); to'xtatilgan kassada — qayta
     //   ishga tushirish kuni. Holat — asosiy kassaniki (sahifada sinov kassasi tanlangan bo'lishi mumkin); server baribir tekshiradi.
@@ -1487,7 +1581,9 @@ function openSettings() {
         t1: nums.t1, l1: nums.l1, cashLimit: nums.cashLimit, orgCashMax: nums.orgCashMax, kassaGoLive: live,
         // Sh-8 B15: inkassatsiya jadvali (server 16-reliz va undan keyin; eski serverga yuborilmaydi — «noma'lum maydon»)
         ...(depOk
-          ? { depositDays: [...$('#modal').querySelectorAll('[data-dep]')].filter(x => x.checked).map(x => Number(x.dataset.dep)), depositKeep: nums.depositKeep } : {}) } });
+          ? { depositDays: [...$('#modal').querySelectorAll('[data-dep]')].filter(x => x.checked).map(x => Number(x.dataset.dep)), depositKeep: nums.depositKeep } : {}),
+        // F2.6b: avans hisoboti muddati va bloklash (server 25-reliz va undan keyin)
+        ...(advOk ? { advDays, advBlock: !!$('#kx-advblock').checked } : {}) } });
       await loadRefs(true); C.closeModal(); C.toast('Sozlamalar saqlandi ✓'); await reload(); if (C.onChange) C.onChange(); }
     catch (e) { $('#kx-save').disabled = false; C.toast(errText(e), true); }
   };
@@ -2415,12 +2511,14 @@ export async function approvalRender(ctx, el) {
     <td data-label="Kimga">${esc(d.partyName || '—')}<div class="small muted">${esc(d.basis || (d.noBasis ? 'asos hujjatisiz' : ''))}</div></td>
     <td data-label="Summa" style="text-align:right;white-space:nowrap"><b>${esc(som(d.amount))}</b></td>
     <td data-label="So‘radi">${esc(nameOf(d.requestedBy))}</td>
-    <td data-label="" style="white-space:nowrap"><button class="btn sm gold" data-kappr="${esc(d.id)}">Tasdiqlash</button> <button class="btn sm danger" data-krej="${esc(d.id)}">Rad etish</button></td></tr>`).join('')}</tbody></table></div>` : '') + fxTbl;
+    <td data-label="" style="white-space:nowrap">${d.op === 'nc_adv_report' && filesOn() ? `<button class="btn sm" data-kfiles="${esc(d.id)}" title="Cheklar surati">📎${num(d.filesN) ? ' ' + esc(String(num(d.filesN))) : ''}</button> ` : ''}<button class="btn sm gold" data-kappr="${esc(d.id)}">Tasdiqlash</button> <button class="btn sm danger" data-krej="${esc(d.id)}">Rad etish</button></td></tr>`).join('')}</tbody></table></div>` : '') + fxTbl;
   const again = () => approvalRender(ctx, el);
   if (fx.length) {
     el.querySelectorAll('[data-fxopen]').forEach(b => b.onclick = () => openFixForm(b.dataset.fxopen, async () => { C.closeModal(); await again(); }));
     fixBind(el, fx, again);
   }
+  // F2.6b: avans hisoboti cheklari surati — ko'rish va qo'shish (fayl qo'shilsa ro'yxat soni yangilanadi)
+  el.querySelectorAll('[data-kfiles]').forEach(b => b.onclick = () => { const d = mineToDo.find(x => x.id === b.dataset.kfiles); if (d) openAdvFiles(d, again); });
   el.querySelectorAll('[data-kappr]').forEach(b => b.onclick = async () => {
     const d = mineToDo.find(x => x.id === b.dataset.kappr) || {}, adv = d.op === 'nc_adv_report';
     if (!confirm(adv ? advApproveText(d) : 'Bu so‘rov tasdiqlansinmi?')) return; b.disabled = true;

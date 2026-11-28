@@ -2365,7 +2365,7 @@ grant execute on function public.kassa_month_check(text, text) to authenticated;
 
 -- Hisobdorlardagi pul (4230) p_asof sanasi holatiga: berilgan − naqd qaytarilgan − avans hisobotlari; "since" — hali yopilmagan
 --   eng eski berilgan sana (FIFO); "workDays" — o'shandan p_asof gacha o'tgan ish kunlari (du–ju; g9: maktabning «Bayram / ta'til
---   kunlari» ham sanalmaydi — app.school_days, nurse-sick.sql); hisobot muddati — 3 ish kuni (§4.9).
+--   kunlari» ham sanalmaydi — app.school_days, nurse-sick.sql); hisobot muddati — sozlama (app.kassa_adv_days, standart 3 ish kuni; §4.9, F2.6b).
 --   Manfiy qoldiq (qaytim yoki hisobot berilgan avansdan ko'p, avanssiz qaytim ham — xato yozuv izi; acc-3, state-5) yashirilmaydi:
 --   "negative" belgisi bilan (muddat hisoblanmaydi) — nazorat ro'yxatida qizil.
 create or replace function app.kassa_accountables(p_desk text, p_asof date) returns jsonb
@@ -2386,7 +2386,7 @@ language sql stable security definer set search_path = public, app, pg_temp as $
   select coalesce((select jsonb_agg(jsonb_build_object('partyId', o.pid, 'name', coalesce(app.kassa_party_label('employee', o.pid), o.nm, ''),
                                                        'given', o.given, 'returned', o.ret, 'reported', o.rep, 'balance', o.given - o.ret - o.rep, 'since', o.since,
                                                        'workDays', jsonb_array_length(app.school_days(o.since + 1, p_asof)),
-                                                       'overdue', jsonb_array_length(app.school_days(o.since + 1, p_asof)) > 3,
+                                                       'overdue', jsonb_array_length(app.school_days(o.since + 1, p_asof)) > app.kassa_adv_days(),
                                                        'negative', o.given - o.ret - o.rep < 0)
                                     order by o.since, o.pid)
                      from o where o.given - o.ret - o.rep <> 0), '[]'::jsonb)
@@ -2409,6 +2409,16 @@ language sql stable security definer set search_path = public, app, pg_temp as $
   select adv.id, adv.d, adv.no, adv.amount, adv.purpose, least(adv.amount, greatest(adv.before + adv.amount - cov.s, 0)) from adv, cov
 $$;
 revoke all on function app.kassa_acc_fifo(text) from public, anon, authenticated;
+
+-- Hisobdorning muddati o'tgan eng eski yopilmagan avansi sanasi (F2.6b): FIFO bo'yicha eng eski yopilmagan avansdan bugungacha o'tgan maktab
+--   ish kunlari muddatdan (app.kassa_adv_days) ko'p bo'lsa — o'sha sana, aks holda NULL. Yangi avansni bloklash (sozlama) — kassa_doc_build,
+--   kassa_doc_pay. Doira — app.kassa_acc_fifo bilan bir xil (sinov kassasisiz).
+create or replace function app.kassa_acc_late(p_party text) returns date
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select s.since from (select min(f.day) as since from app.kassa_acc_fifo(p_party) f where f.remaining > 0) s
+   where s.since is not null and jsonb_array_length(app.school_days(s.since + 1, app.fin_today())) > app.kassa_adv_days()
+$$;
+revoke all on function app.kassa_acc_late(text) from public, anon, authenticated;
 
 -- Muddati o'tgan avans hisobotlari soni va summasi (eslatmalar — F1.24: «Kassa» sahifasi va Telegram nazorat qatori).
 create or replace function app.kassa_acc_overdue(p_desk text, p_asof date) returns jsonb
@@ -2670,7 +2680,8 @@ begin
                                           else 0 end),
     -- moslik (kassa-links.sql: app.kassa_reconcile) — faqat asosiy kassa
     'reconcile', case when v_test then jsonb_build_object('live', false, 'total', 0) else app.kassa_reconcile(v_today - 30, v_today) end,
-    -- hisobdorlardagi pul (4230): app.kassa_accountables — berilgan − naqd qaytarilgan − avans hisobotlari; hisobot muddati — 3 ish kuni (§4.9);
+    -- hisobdorlardagi pul (4230): app.kassa_accountables — berilgan − naqd qaytarilgan − avans hisobotlari; hisobot muddati — sozlama
+    --   (app.kassa_adv_days, standart 3 ish kuni; §4.9);
     --   manfiy qoldiq ham («negative»)
     'accountable', app.kassa_accountables(v_desk, v_today),
     -- F2.6: hisobdorlarga qarzimiz (6970): tasdiqlangan avans hisobotidagi ortiqcha sarf − «Ortiqcha sarfni qoplash» orderlari
@@ -2727,21 +2738,22 @@ grant execute on function public.kassa_checks(text) to authenticated;
 
 -- ---------- O'qish: RP-07 — hisobdor kartochkasi (F2.6) ----------
 --   p_party bo'sh — ro'yxat: hisobdor qoldig'i (4230), hisobdorga qarzimiz (6970) yoki tasdiq kutayotgan avans hisoboti bor xodimlar — eng eski
---   yopilmagan avans sanasi, ish kunlarida yoshi, muddati o'tganlik (3 ish kuni, §4.9 / FD-14; maktabning dam olish kunlari sanalmaydi).
+--   yopilmagan avans sanasi, ish kunlarida yoshi, muddati o'tganlik (sozlama — app.kassa_adv_days, standart 3 ish kuni; §4.9 / FD-14;
+--   maktabning dam olish kunlari sanalmaydi).
 --   p_party berilsa — bitta xodim: qoldiqlar, yopilmagan avanslar (FIFO, maqsadi bilan), tasdiq kutayotgan hisobot, barcha o'tkazilgan
 --   hujjatlar (avans, qaytim, avans hisoboti — 4230 va 6970 qismlari, ortiqcha sarfni qoplash). Doira — sinov kassasisiz. Kim: kassa
 --   hujjatlarini ko'radiganlar (kassir, g'aznachi, Moliya menejeri, buxgalter, Direktor).
 create or replace function public.kassa_acc_card(p_party text default null) returns jsonb
 language plpgsql stable security definer set search_path = public, app, pg_temp as $$
-declare v_today date := app.fin_today(); v_pid text; v_name text;
+declare v_today date := app.fin_today(); v_pid text; v_name text; v_days int := app.kassa_adv_days();
 begin
   if not app.kassa_reader() then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
   if nullif(btrim(coalesce(p_party, '')), '') is null then
-    return jsonb_build_object('ok', true, 'today', v_today, 'list', coalesce((
+    return jsonb_build_object('ok', true, 'today', v_today, 'advDays', v_days, 'list', coalesce((
       select jsonb_agg(jsonb_build_object('partyId', x.pid, 'name', coalesce(app.kassa_party_label('employee', x.pid), x.nm, ''),
                                           'open', x.open, 'due', x.due, 'pending', x.pend > 0, 'since', a.since,
                                           'workDays', case when a.since is not null then jsonb_array_length(app.school_days(a.since + 1, v_today)) end,
-                                          'overdue', a.since is not null and jsonb_array_length(app.school_days(a.since + 1, v_today)) > 3)
+                                          'overdue', a.since is not null and jsonb_array_length(app.school_days(a.since + 1, v_today)) > v_days)
                        order by a.since nulls last, x.pid)
         from (select c."partyId" as pid, max(c."partyName") as nm, app.kassa_acc_open(c."partyId") as open, app.kassa_acc_due(c."partyId") as due,
                      count(*) filter (where c.op = 'nc_adv_report' and c.status = 'draft') as pend
@@ -2753,12 +2765,12 @@ begin
        where x.open <> 0 or x.due <> 0 or x.pend > 0), '[]'::jsonb));
   end if;
   select k.o_id, k.o_name into v_pid, v_name from app.kassa_party('employee', p_party, null) k;
-  return jsonb_build_object('ok', true, 'today', v_today,
+  return jsonb_build_object('ok', true, 'today', v_today, 'advDays', v_days,
     'party', jsonb_build_object('id', v_pid, 'name', coalesce(app.kassa_party_label('employee', v_pid), v_name), 'left', app.kassa_emp_left(v_pid)),
     'open', app.kassa_acc_open(v_pid), 'due', app.kassa_acc_due(v_pid),
     'aging', coalesce((select jsonb_agg(jsonb_build_object('docId', f.doc_id, 'day', f.day, 'no', f.no, 'amount', f.amount, 'remaining', f.remaining,
                                                           'purposeArticle', f.purpose, 'workDays', jsonb_array_length(app.school_days(f.day + 1, v_today)),
-                                                          'overdue', jsonb_array_length(app.school_days(f.day + 1, v_today)) > 3)
+                                                          'overdue', jsonb_array_length(app.school_days(f.day + 1, v_today)) > v_days)
                                         order by f.day, f.no)
                          from app.kassa_acc_fifo(v_pid) f where f.remaining > 0), '[]'::jsonb),
     'pending', (select jsonb_build_object('id', c.id, 'amount', c.amount, 'createdAt', c."createdAt", 'requestedBy', c."requestedBy",

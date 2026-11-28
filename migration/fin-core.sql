@@ -199,6 +199,9 @@ end $$;
 --   depositDays / depositKeep (extra; Sh-8 B15 — buxgalter: inkassatsiya har juma; egasi qarori 2026-11-26): naqd pulni bankka
 --   topshirish kunlari (ISO hafta kunlari 1–7, takrorsiz; bo'sh massiv — jadval yo'q; kalit yo'q — juma) va topshirilgandan keyin
 --   kassada qoldiriladigan summa (maydalik). Eslatma, nazorat va limit tavsiyasi — kassa-day.sql: app.kassa_deposit_cfg.
+--   advDays / advBlock (extra; F2.6b, FD-14): avans hisoboti muddati — maktab ish kunlarida (1–30; kalit yo'q — 3) va muddati o'tgan
+--   yopilmagan avansi bor xodimga yangi «Hisobdorga avans»ni bloklash (true — so'rov ham, pul berish ham rad; kalit yo'q — false,
+--   faqat ogohlantirish). Qo'llanishi — kassa-docs.sql: app.kassa_adv_days, app.kassa_adv_block.
 --   kassaGoLive o'zgarsa — kassa-day.sql: app.kassa_golive_guard (modulning shu qismi o'rnatilgan bo'lsa): ishlagan kassada kelgan sanani
 --   bo'shatish / surish — kassani TO'XTATISH (ochiq kun va pul berilmagan so'rovlar bo'lmasa; sana bo'sh saqlanadi), to'xtatilgan kassada —
 --   faqat qayta ishga tushirish kuniga (ishga-tushirish §9; ui-5). O'zgarish kun jurnaliga yoziladi.
@@ -229,6 +232,12 @@ begin
          or (select count(distinct x #>> '{}') from jsonb_array_elements(p -> k) x) <> jsonb_array_length(p -> k) then
         raise exception 'fin_org_set: depositDays — hafta kunlari ro''yxati (1–7, takrorsiz)' using errcode = '22023';
       end if;
+    elsif k = 'advDays' then
+      if jsonb_typeof(p -> k) is distinct from 'number' or (p ->> k) !~ '^[0-9]{1,2}$' or (p ->> k)::int not between 1 and 30 then
+        raise exception 'fin_org_set: advDays — avans hisoboti muddati, ish kunlarida (1–30)' using errcode = '22023';
+      end if;
+    elsif k = 'advBlock' then
+      if jsonb_typeof(p -> k) is distinct from 'boolean' then raise exception 'fin_org_set: advBlock — true yoki false' using errcode = '22023'; end if;
     else
       raise exception 'fin_org_set: noma''lum maydon %', k using errcode = '22023';
     end if;
@@ -253,7 +262,9 @@ begin
                     || case when p ? 'orgCashMax' then jsonb_build_object('orgCashMax', (p ->> 'orgCashMax')::numeric) else '{}'::jsonb end
                     || case when p ? 'depositKeep' then jsonb_build_object('depositKeep', (p ->> 'depositKeep')::numeric) else '{}'::jsonb end
                     || case when p ? 'depositDays' then jsonb_build_object('depositDays', (select coalesce(jsonb_agg((x #>> '{}')::int order by (x #>> '{}')::int), '[]'::jsonb)
-                                                                                             from jsonb_array_elements(p -> 'depositDays') x)) else '{}'::jsonb end,
+                                                                                             from jsonb_array_elements(p -> 'depositDays') x)) else '{}'::jsonb end
+                    || case when p ? 'advDays' then jsonb_build_object('advDays', (p ->> 'advDays')::int) else '{}'::jsonb end
+                    || case when p ? 'advBlock' then jsonb_build_object('advBlock', (p ->> 'advBlock')::boolean) else '{}'::jsonb end,
     "updatedAt"   = now(), "updatedBy" = app.uid()
   where id = 'main';
   -- Ishga tushadigan kun bugungi yoki o'tgan kunga qo'yilsa: shu kundan beri kassa orderisiz naqd yozuv (o'quv to'lovi, xarajat,

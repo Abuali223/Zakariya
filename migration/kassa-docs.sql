@@ -128,7 +128,7 @@ declare
   v_lines jsonb; v_line jsonb; v_i int := 0; v_n int; v_lamt numeric; v_art public.fin_articles%rowtype; v_aid text;
   v_debit text; v_credit text; v_counter text; v_sum_cash numeric := 0; v_sum_all numeric := 0; v_lnote text;
   v_need2 boolean; v_needd boolean; v_cap timestamptz; v_rows jsonb := '[]'::jsonb; v_is_cash boolean; v_orgcash boolean := false;
-  v_month text; v_hash text; v_purpose text; v_due numeric;
+  v_month text; v_hash text; v_purpose text; v_due numeric; v_late date;
 begin
   o_dup := false;
   if p is null or jsonb_typeof(p) <> 'object' then
@@ -228,6 +228,15 @@ begin
     if v_amount > v_due then
       raise exception 'Summa (% so''m) hisobdorga qarzimizdan (ortiqcha sarf: % so''m) katta', trim_scale(v_amount), trim_scale(v_due)
         using errcode = 'P0001', hint = 'kassa:due_over';
+    end if;
+  end if;
+  -- F2.6b (FD-14): muddati o'tgan yopilmagan avansi bor xodimga yangi avans — sozlamada bloklash yoqilgan bo'lsa rad (Direktor ham; pul
+  --   berishda hisobdor qulfi ostida yana tekshiriladi). Muddat — app.kassa_adv_days (maktab ish kunlari), doira — sinov kassasisiz.
+  if v_op = 'out_accountable' and not p_internal and v_ptype = 'employee' and app.kassa_adv_block() then
+    v_late := app.kassa_acc_late(v_pid);
+    if v_late is not null then
+      raise exception '«%»da % dan beri hisobot qilinmagan avans bor (avans hisoboti muddati — % ish kuni): yangi avans avans hisoboti yoki qaytimdan keyin beriladi (bloklash — «⚙ Sozlamalar»)',
+        v_pname, to_char(v_late, 'DD.MM.YYYY'), app.kassa_adv_days() using errcode = 'P0001', hint = 'kassa:adv_overdue';
     end if;
   end if;
 
@@ -605,7 +614,9 @@ language sql stable security definer set search_path = public, app, pg_temp as $
                                 from public.cash_doc_fixes f where f."docId" = c.id and f.status in ('pending', 'approved')), '[]'::jsonb),
            'eff', app.kassa_eff_doc(c.id),
            -- F2.12: patta QR kaliti (faqat o'tkazilgan kirim orderida; tekshirish — public.verify_patta)
-           'vtok', (select v.token from public.cash_doc_verify v where v."docId" = c.id))
+           'vtok', (select v.token from public.cash_doc_verify v where v."docId" = c.id),
+           -- F2.6b: biriktirilgan fayllar (cheklar surati) soni; ro'yxat va havolalar — 2-ro'yxat va Direktorga, public.kassa_doc_files RPC orqali
+           'filesN', (select count(*) from public.cash_doc_files f where f."docId" = c.id))
     from public.cash_docs c where c.id = p_id
 $$;
 revoke all on function app.kassa_doc_json(text) from public, anon, authenticated;
@@ -766,6 +777,23 @@ language sql stable security definer set search_path = public, app, pg_temp as $
               else not exists (select 1 from public.cash_desks k where k.id = c.desk and k."isTest") end
 $$;
 revoke all on function app.kassa_acc_due(text, text) from public, anon, authenticated;
+
+-- F2.6b (FD-14): avans hisoboti muddati — maktab ish kunlarida (fin_org.extra.advDays: 1–30, kalit yo'q yoki noto'g'ri — 3) va muddati
+--   o'tgan yopilmagan avansi bor xodimga yangi avansni bloklash (extra.advBlock; yo'q — false: faqat ogohlantirish). Bitta qoida:
+--   hisobdorlar ro'yxati (kassa_accountables — nazorat ro'yxati, eslatmalar), RP-07 (kassa_acc_card), so'rov va pul berish (kassa_doc_build,
+--   kassa_doc_pay: app.kassa_acc_late — kassa-day.sql).
+create or replace function app.kassa_adv_days() returns int
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select case when (o.extra ->> 'advDays') ~ '^[0-9]{1,2}$' and (o.extra ->> 'advDays')::int between 1 and 30
+                               then (o.extra ->> 'advDays')::int end
+                     from public.fin_org o where o.id = 'main'), 3)
+$$;
+revoke all on function app.kassa_adv_days() from public, anon, authenticated;
+create or replace function app.kassa_adv_block() returns boolean
+language sql stable security definer set search_path = public, app, pg_temp as $$
+  select coalesce((select (o.extra ->> 'advBlock') = 'true' from public.fin_org o where o.id = 'main'), false)
+$$;
+revoke all on function app.kassa_adv_block() from public, anon, authenticated;
 
 -- Avans hisobotining (АО-1) qatoriga tanlanadigan statiya — BITTA qoida (acc-5): server (kassa-links.sql: kassa_adv_report) ham,
 --   «Avans hisoboti» shaklidagi ro'yxat ham (kassa-day.sql: kassa_refs — «advReport» belgisi) shundan. Reja §4.4 da ikkinchi tomoni
@@ -958,7 +986,7 @@ grant execute on function public.kassa_doc_cancel(text, text) to authenticated;
 create or replace function public.kassa_doc_pay(p_id text) returns jsonb
 language plpgsql security definer set search_path = public, app, pg_temp as $$
 declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_was text; v_src text; v_op text; v_desk text;
-        v_party text; v_dir text; v_nd boolean; v_open numeric; v_cur public.cash_docs%rowtype; v_org boolean;
+        v_party text; v_dir text; v_nd boolean; v_open numeric; v_cur public.cash_docs%rowtype; v_org boolean; v_late date;
 begin
   if not (app.kassa_operator() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: naqd pulni kassir (favqulodda — Direktor) beradi' using errcode = '42501';
@@ -1023,6 +1051,14 @@ begin
   -- Hisobdorga avans: hisobot qilinmagan qoldiq bo'lsa — faqat Direktor tasdiqlagan so'rov bo'yicha (hisobdor qulfi prelock'da olingan).
   if v_op = 'out_accountable' and v_was <> 'posted' then
     select c."partyId", c."dirApprovedBy", c."needsDirector" into v_party, v_dir, v_nd from public.cash_docs c where c.id = p_id;
+    -- F2.6b: so'rovdan keyin avans hisoboti muddati o'tgan bo'lsa (bloklash yoqilgan) — pul berilmaydi (so'rov bekor qilinadi)
+    if app.kassa_adv_block() then
+      v_late := app.kassa_acc_late(v_party);
+      if v_late is not null then
+        raise exception 'Hisobdorda % dan beri hisobot qilinmagan avans bor (avans hisoboti muddati — % ish kuni o''tgan): yangi avans berilmaydi — so''rovni bekor qiling; avval avans hisoboti yoki qaytim (bloklash — «⚙ Sozlamalar»)',
+          to_char(v_late, 'DD.MM.YYYY'), app.kassa_adv_days() using errcode = 'P0001', hint = 'kassa:adv_overdue';
+      end if;
+    end if;
     v_open := app.kassa_acc_open(v_party);
     if v_open > 0 and v_dir is null then
       -- So'rov yozilganda qoldiq yo'q edi (Direktorga bormagan), keyin boshqa avans berilgan — yangi so'rov Direktorga boradi.

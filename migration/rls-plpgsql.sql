@@ -35,7 +35,7 @@ begin
   foreach f in array array[
     'app.role_set()', 'app.is_admin()', 'app.is_zavuch()', 'app.is_reception()', 'app.is_finance()', 'app.is_finance_mgr()',
     'app.is_cashier()', 'app.is_staff()', 'app.is_nurse()', 'app.is_hr()', 'app.is_accountant()', 'app.is_marketing()',
-    'app.is_admin_head()', 'app.is_system()', 'app.is_notify_editor()', 'app.kassa_reader()', 'app.kassa_operator()',
+    'app.is_admin_head()', 'app.is_system()', 'app.is_notify_editor()', 'app.kassa_reader()', 'app.kassa_operator()', 'app.fin_list2()',
     'app.can_see_salary()', 'app.has_active_child()', 'app.claim_row(text,text)', 'app.owns_child(text)', 'app.owns_student_doc(text)',
     'app.my_child_sids()', 'app.my_student_docs()', 'app.my_child_class_keys()', 'app.my_staff_class_keys()',
     'app.rls_class_staff()', 'app.rls_ann_gate()', 'app.rls_ann_staff_keys()', 'app.rls_ann_child_keys()',

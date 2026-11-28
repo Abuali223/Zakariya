@@ -11,6 +11,12 @@
 --       qoplangan ortiqcha sarfli hisobot bekor qilinmaydi (avval order);
 --   (C) RP-07 hisobdor kartochkasi (kassa_acc_card): ro'yxat (qoldiq, qarz, kutilayotgan hisobot, eng eski yopilmagan avans yoshi —
 --       ish kunlarida, muddati o'tganlik) va kartochka (FIFO yopilmagan avanslar maqsadi bilan, hujjatlar — 4230 / 6970 qismlari); rollar.
+--   F2.6b (reliz 25): (M) avans hisoboti muddati sozlamasi (fin_org.extra.advDays — faqat Direktor, 1–30; standart 3) — kartochka, RP-07,
+--       nazorat ro'yxati muddatni shundan oladi (aynan chegarada); bloklash (extra.advBlock) — muddati o'tgan avansi bor xodimga yangi
+--       avans so'rovi ham, pul berish ham rad (kassa:adv_overdue), o'chiq bo'lsa — avvalgidek (Direktor tasdig'i bilan);
+--   (Y) cheklar surati: yopiq «receipts» bucket siyosatlari (yuklash va o'qish — 2-ro'yxat va Direktor, faqat adv/<uuid>.<kengaytma>),
+--       hisobotga fayllar (yuklanmagan, noto'g'ri, takror — rad; izga kiradi), keyin qo'shish (takrorsiz, 20 tagacha, boshqa hujjatniki — rad,
+--       hisobdorning o'zi / kassir / bekor qilingan hisobot — rad), o'tkazilgan hisobotga ham; jadvalni to'g'ridan-to'g'ri o'qish va yozish.
 --   Migratsiya EMAS. FAQAT BO'SH sinov bazasida, «--dev» zanjiridan keyin:
 --     bash migration/chain.sh --dev --no-lock-timeout | psql -d sinov -q && psql -d sinov -X -f migration/test-kassa-adv.sql
 --   Hamma narsa BITTA tranzaksiyada va oxirida ROLLBACK. Sinov ismlari to'qima. Natija: har tekshiruv PASS/FAIL + JAMI.
@@ -99,6 +105,13 @@ end $$;
 create or replace function zz.status(p_id text) returns text language plpgsql as $$ begin return (select status from public.cash_docs where id = p_id); end $$;
 create or replace function zz.nexp(p_id text) returns text language plpgsql as $$
 begin return (select count(*) || ':' || trim_scale(coalesce(sum(amount), 0)) from public.expenses where "cashDocId" = p_id); end $$;
+-- kalit (clientRef) bo'yicha hujjatlar soni va id — plpgsql: o'sha ifodada oldinroq yozilgan hujjatni ham ko'radi (oddiy subquery ko'rmaydi)
+create or replace function zz.cnt(p_like text) returns bigint language plpgsql as $$
+begin return (select count(*) from public.cash_docs where "clientRef" like p_like); end $$;
+create or replace function zz.idref(p_ref text) returns text language plpgsql as $$
+begin return (select id from public.cash_docs where "clientRef" = p_ref); end $$;
+create or replace function zz.nfiles(p_id text) returns bigint language plpgsql as $$
+begin return (select count(*) from public.cash_doc_files where "docId" = p_id); end $$;
 -- kassa kunini yopish (sanalgan = hisobdagi qoldiq)
 create or replace function zz.close(p_day text) returns text language sql as $$
   select zz.rpc('U_KAS', 'kassa_day_close', format('{"desk":"main","day":"%s","counted":%s}', p_day,
@@ -126,7 +139,7 @@ select zz.chk('P1 avans maqsadi: ish haqi (EX-01), yetkazib beruvchi bilan hisob
   zz.req('adv-p1-0001', 'out_accountable', 'staff:st1', 300000, '{"purposeArticle":"EX-01"}') || ' | '
   || zz.req('adv-p1-0002', 'out_accountable', 'staff:st1', 300000, '{"purposeArticle":"OP-17"}') || ' | '
   || zz.req('adv-p1-0003', 'out_accountable', 'staff:st1', 300000, '{"purposeArticle":"ZZ-99"}') || ' | '
-  || (select count(*) from public.cash_docs where "clientRef" like 'adv-p1-%'),
+  || zz.cnt('adv-p1-%'),
   '^ERR 22023 \[kassa:article\].* \| ERR 22023 \[kassa:article\].* \| ERR 22023 \[kassa:article\].* \| 0$');
 select zz.put('A0', zz.req('adv-a0-0001', 'out_accountable', 'staff:st1', 300000, '{"purposeArticle":"EX-20"}'));
 select zz.chk('P2 maqsad hujjat suratida (sourceSnapshot.purposeArticle); so''rov 2-ro''yxat tasdig''ini kutadi',
@@ -248,7 +261,7 @@ select zz.chk('O5 qoldiq 0 (qarzimiz bor) — yangi hisobot «avans yo''q»; kas
 -- ---------- (D) «Ortiqcha sarfni qoplash» chiqim orderi ----------
 select zz.chk('D1 qarzdan katta — rad (summa va qarz bilan); qarz yo''q xodim, sinov kassasi (o''z doirasi) — «qoplanadigan ortiqcha sarf yo''q»; hujjat yozilmaydi',
   zz.req('r-d1-0001', 'out_overspend', 'staff:st1', 50000) || ' | ' || zz.req('r-d1-0002', 'out_overspend', 'teachers:tch1', 1000) || ' | '
-  || zz.req('r-d1-0003', 'out_overspend', 'staff:st1', 1000, '{"desk":"sinov"}') || ' | ' || (select count(*) from public.cash_docs where "clientRef" like 'r-d1-%'),
+  || zz.req('r-d1-0003', 'out_overspend', 'staff:st1', 1000, '{"desk":"sinov"}') || ' | ' || zz.cnt('r-d1-%'),
   '^ERR P0001 \[kassa:due_over\].*\(50000 so''m\).*\(ortiqcha sarf: 40000 so''m\).* \| ERR P0001 \[kassa:due_none\].* \| ERR P0001 \[kassa:due_none\].* \| 0$');
 select zz.put('D2a', zz.req('r-d2-0001', 'out_overspend', 'staff:st1', 30000, '{"purposeArticle":"ZZ-99"}'));
 select zz.put('D2b', zz.req('r-d2-0002', 'out_overspend', 'staff:st1', 30000));
@@ -378,6 +391,118 @@ select zz.chk('C7 ortiqcha sarfdan keyin yangi avans (50 000): FIFO — eski ava
   || (select string_agg((a ->> 'day') || ':' || trim_scale((a ->> 'amount')::numeric) || ':' || trim_scale((a ->> 'remaining')::numeric), ', ')
         from jsonb_array_elements(zz.js(zz.card('U_FM', 'staff:st1')) -> 'aging') a),
   '^posted:50000 \| 2027-03-01:50000:50000$');
+
+-- ---------- (M) F2.6b: avans hisoboti muddati sozlamasi va yangi avansni bloklash ----------
+select zz.chk('K6 01.03 yopildi', zz.f(zz.close('2027-03-01'), 'day', 'status'), '^closed$');
+select zz.clock('2027-03-05 10:00+05');   -- juma: st1 ning 01.03 avansidan beri 4 ish kuni (se–ju)
+select zz.chk('M1 muddat sozlamasi: faqat Direktor; 0, 31, matn, kasr — rad; bloklash — faqat true / false',
+  zz.as('U_FM', $q$select public.fin_org_set('{"advDays":4}')::text$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.fin_org_set('{"advDays":0}')::text$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.fin_org_set('{"advDays":31}')::text$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.fin_org_set('{"advDays":"4"}')::text$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.fin_org_set('{"advDays":4.5}')::text$q$) || ' | '
+  || zz.as('U_DIR', $q$select public.fin_org_set('{"advBlock":"true"}')::text$q$),
+  '^ERR 42501.* \| ERR 22023 \[\].*advDays.* \| ERR 22023 \[\].*advDays.* \| ERR 22023 \[\].*advDays.* \| ERR 22023 \[\].*advDays.* \| ERR 22023 \[\].*advBlock.*$');
+select zz.chk('M2 muddat: standart 3 ish kuni — st1 ning 01.03 avansi (4 ish kuni) muddati o''tgan; sozlama 4 — o''tmagan (chegara): kartochka, RP-07 ro''yxati, nazorat ro''yxati, eslatma',
+  (select (a ->> 'workDays') || ':' || (a ->> 'overdue') from jsonb_array_elements(zz.js(zz.card('U_FM', 'staff:st1')) -> 'aging') a)
+  || ':' || (zz.js(zz.card('U_FM', 'staff:st1')) ->> 'advDays')
+  || ':' || (select (a ->> 'overdue') from jsonb_array_elements(zz.checks() -> 'accountable') a where a ->> 'partyId' = 'staff:st1')
+  || ' | ' || zz.f(zz.as('U_DIR', $q$select public.fin_org_set('{"advDays":4}')::text$q$), 'extra', 'advDays')
+  || ' | ' || (select (a ->> 'overdue') from jsonb_array_elements(zz.js(zz.card('U_FM', 'staff:st1')) -> 'aging') a)
+  || ':' || (zz.js(zz.card('U_KAS', '')) ->> 'advDays')
+  || ':' || (select (x ->> 'overdue') from jsonb_array_elements(zz.js(zz.card('U_KAS', '')) -> 'list') x where x ->> 'partyId' = 'staff:st1')
+  || ':' || (select (a ->> 'overdue') from jsonb_array_elements(zz.checks() -> 'accountable') a where a ->> 'partyId' = 'staff:st1'),
+  '^4:true:3:true \| 4 \| false:4:false:false$');
+select zz.chk('M3 bloklash yoqildi (muddat 3): muddati o''tgan avansi bor xodimga yangi avans so''rovi rad (kassa:adv_overdue — sana va muddat bilan), hujjat yozilmaydi',
+  zz.f(zz.as('U_DIR', $q$select public.fin_org_set('{"advDays":3,"advBlock":true}')::text$q$), 'extra', 'advBlock') || ' | '
+  || zz.req('adv-m3-0001', 'out_accountable', 'staff:st1', 10000) || ' | ' || zz.cnt('adv-m3-0001'),
+  '^true \| ERR P0001 \[kassa:adv_overdue\].*01\.03\.2027.*3 ish kuni.* \| 0$');
+select zz.put('M4', left(zz.as('U_DIR', $q$select public.fin_org_set('{"advDays":4}')::text$q$), 0) || zz.req('adv-m4-0001', 'out_accountable', 'staff:st1', 10000));
+select zz.chk('M4 bloklash yoqiq, muddat 4 (chegara — o''tmagan): so''rov yoziladi; hisobotsiz qoldiq bor — Direktor tasdig''i ham (hisobotsiz yangi avans qoidasi)',
+  zz.f(zz.get('M4'), 'status') || ':' || zz.f(zz.get('M4'), 'needsDirector'), '^draft:true$');
+select zz.chk('M5 tasdiqlangach muddat qisqardi (3) — pul berishda rad (kassa:adv_overdue), pul berilmaydi; bloklash o''chirilgach — beriladi (Direktor tasdiqlagan)',
+  left(zz.appr('U_FM', zz.id('M4')), 0) || left(zz.appr('U_DIR', zz.id('M4')), 0)
+  || zz.f(zz.as('U_DIR', $q$select public.fin_org_set('{"advDays":3}')::text$q$), 'extra', 'advDays') || ' | '
+  || zz.pay('U_KAS', zz.id('M4')) || ' | ' || zz.status(zz.id('M4'))
+  || ' | ' || zz.f(zz.as('U_DIR', $q$select public.fin_org_set('{"advBlock":false}')::text$q$), 'extra', 'advBlock') || ':' || zz.f(zz.pay('U_KAS', zz.id('M4')), 'status')
+  || ':' || zz.open('staff:st1'),
+  '^3 \| ERR P0001 \[kassa:adv_overdue\].* \| approved \| false:posted:60000$');
+select zz.chk('M6 bloklash o''chiq: muddati o''tgan bo''lsa ham so''rov yoziladi (faqat Direktor tasdig''i bilan — avvalgi qoida); so''rov bekor qilinadi',
+  zz.f(zz.req('adv-m6-0001', 'out_accountable', 'staff:st1', 10000), 'needsDirector')
+  || ':' || zz.f(zz.cancel('U_KAS', zz.idref('adv-m6-0001'), 'Sinov so''rovi'), 'status'),
+  '^true:cancelled$');
+
+-- ---------- (Y) F2.6b: avans hisoboti cheklari surati (yopiq «receipts» bucket, cash_doc_files) ----------
+grant usage on schema storage to anon, authenticated;   -- sinov o'rinbosarida Supabase'dagi kabi grantlar (ruxsat — siyosatlar orqali)
+grant all on storage.objects to anon, authenticated;
+select zz.chk('Y1 «receipts» bucket yopiq; yuklash — 2-ro''yxat va Direktor, faqat adv/<uuid>.<jpg|jpeg|png|pdf>; kassir, o''qituvchi, mehmon — yo''q (yuklash siyosatining o''zi, RETURNING siz)',
+  (select public::text from storage.buckets where id = 'receipts') || ' | '
+  || zz.as('U_ACC', $q$insert into storage.objects (bucket_id, name) values ('receipts', 'adv/11111111-1111-4111-8111-111111111111.jpg') returning name$q$) || ' | '
+  || zz.as('U_DIR', $q$insert into storage.objects (bucket_id, name) values ('receipts', 'adv/22222222-2222-4222-8222-222222222222.pdf') returning name$q$) || ' | '
+  || zz.as('U_FM', $q$insert into storage.objects (bucket_id, name) values ('receipts', 'adv/33333333-3333-4333-8333-333333333333.png') returning name$q$) || ' | '
+  || zz.as('U_KAS', $q$insert into storage.objects (bucket_id, name) values ('receipts', 'adv/44444444-4444-4444-8444-444444444444.jpg')$q$) || ' | '
+  || zz.as('U_TCH', $q$insert into storage.objects (bucket_id, name) values ('receipts', 'adv/44444444-4444-4444-8444-444444444444.jpg')$q$) || ' | '
+  || zz.as(null, $q$insert into storage.objects (bucket_id, name) values ('receipts', 'adv/44444444-4444-4444-8444-444444444444.jpg')$q$) || ' | '
+  || zz.as('U_FM', $q$insert into storage.objects (bucket_id, name) values ('receipts', 'adv/chek.jpg')$q$) || ' | '
+  || zz.as('U_FM', $q$insert into storage.objects (bucket_id, name) values ('receipts', 'adv/55555555-5555-4555-8555-555555555555.exe')$q$),
+  '^false \| adv/1111.*\.jpg \| adv/2222.*\.pdf \| adv/3333.*\.png \| ERR 42501.* \| ERR 42501.* \| ERR 42501.* \| ERR 42501.* \| ERR 42501.*$');
+select zz.chk('Y2 o''qish: 2-ro''yxat va Direktor — 3 ta; kassir, o''qituvchi — 0',
+  zz.as('U_ACC', $q$select count(*)::text from storage.objects where bucket_id = 'receipts'$q$) || ':' || zz.as('U_DIR', $q$select count(*)::text from storage.objects where bucket_id = 'receipts'$q$)
+  || ':' || zz.as('U_KAS', $q$select count(*)::text from storage.objects where bucket_id = 'receipts'$q$) || ':' || zz.as('U_TCH', $q$select count(*)::text from storage.objects where bucket_id = 'receipts'$q$),
+  '^3:3:0:0$');
+create or replace function zz.repf(p_ref text, p_files text) returns text language sql as $$
+  select zz.rpc('U_FM', 'kassa_adv_report', format('{"clientRef":"%s","partyId":"staff:st2","reportDate":"%s","lines":[{"articleId":"EX-32","amount":20000,"note":"Chek 21, 05.03"}],"files":%s}',
+                                                   p_ref, app.fin_today(), p_files)) $$;
+select zz.chk('Y3 avans hisobotiga fayllar: yuklanmagan, yo''li noto''g''ri, ikki marta, ro''yxat emas, 20 tadan ortiq — rad (kassa:file), hujjat yozilmaydi',
+  zz.repf('adv-y3-0001', '["adv/66666666-6666-4666-8666-666666666666.jpg"]') || ' | '
+  || zz.repf('adv-y3-0002', '["../medical/x.jpg"]') || ' | '
+  || zz.repf('adv-y3-0003', '["adv/11111111-1111-4111-8111-111111111111.jpg","adv/11111111-1111-4111-8111-111111111111.jpg"]') || ' | '
+  || zz.repf('adv-y3-0004', '"adv/11111111-1111-4111-8111-111111111111.jpg"') || ' | '
+  || zz.repf('adv-y3-0005', (select jsonb_agg('adv/' || gen_random_uuid() || '.jpg') from generate_series(1, 21))::text) || ' | '
+  || zz.cnt('avh_adv-y3-%'),
+  '^ERR 22023 \[kassa:file\].*yuklanmagan.* \| ERR 22023 \[kassa:file\].*yo''li.* \| ERR 22023 \[kassa:file\].*ikki marta.* \| ERR 22023 \[kassa:file\].* \| ERR 22023 \[kassa:file\].*20 tadan.* \| 0$');
+select zz.put('Y4', zz.repf('adv-y4-0001', '[{"path":"adv/11111111-1111-4111-8111-111111111111.jpg","name":"chek 21.jpg"},"adv/22222222-2222-4222-8222-222222222222.pdf"]'));
+select zz.chk('Y4 hisobot 2 ta fayl bilan kiritildi: hujjatda fayllar soni; ro''yxat (asl nomi, kim qo''shgan) — buxgalter va Direktorga; kassirga — yo''q',
+  zz.f(zz.get('Y4'), 'status') || ':' || zz.f(zz.get('Y4'), 'filesN') || ' | '
+  || (select string_agg(right(f ->> 'path', 7) || '=' || (f ->> 'name') || '@' || (f ->> 'addedBy') || '/' || (f ->> 'addedByName'), ',' order by f ->> 'path')
+        from jsonb_array_elements(zz.js(zz.as('U_ACC', format('select public.kassa_doc_files(%L)::text', zz.id('Y4')))) -> 'files') f)
+  || ' | ' || jsonb_array_length(zz.js(zz.as('U_DIR', format('select public.kassa_doc_files(%L)::text', zz.id('Y4')))) -> 'files')
+  || ' | ' || zz.as('U_KAS', format('select public.kassa_doc_files(%L)::text', zz.id('Y4'))),
+  '^draft:2 \| 111\.jpg=chek 21\.jpg@U_FM/Sinov Moliyachi,222\.pdf=@U_FM/Sinov Moliyachi \| 2 \| ERR 42501');
+select zz.chk('Y5 state-9: o''sha kalit bilan boshqa fayllar yoki faylsiz — rad (kassa:ref_mismatch); fayllar boshqa tartibda — o''sha hujjat (dup)',
+  zz.repf('adv-y4-0001', '["adv/11111111-1111-4111-8111-111111111111.jpg"]') || ' | '
+  || zz.repf('adv-y4-0001', '[]') || ' | '
+  || zz.f(zz.repf('adv-y4-0001', '["adv/22222222-2222-4222-8222-222222222222.pdf","adv/11111111-1111-4111-8111-111111111111.jpg"]'), 'dup'),
+  '^ERR 22023 \[kassa:ref_mismatch\].* \| ERR 22023 \[kassa:ref_mismatch\].* \| true$');
+select zz.chk('Y6 keyin qo''shish (tasdiq kutayotgan hisobotga): buxgalter — 1 ta qo''shildi; o''sha fayl qayta — 0 (takrorsiz); jami 3',
+  zz.f(zz.as('U_ACC', format($f$select public.kassa_doc_files_add(%L, '["adv/33333333-3333-4333-8333-333333333333.png"]')::text$f$, zz.id('Y4'))), 'added')
+  || ':' || zz.f(zz.as('U_ACC', format($f$select public.kassa_doc_files_add(%L, '["adv/33333333-3333-4333-8333-333333333333.png"]')::text$f$, zz.id('Y4'))), 'added')
+  || ':' || zz.nfiles(zz.id('Y4')),
+  '^1:0:3$');
+select zz.chk('Y7 qo''shish taqiqlari: kassir (42501 — bekor qilingan hujjatda ham, holat oshkor bo''lmaydi); hisobdorning o''zi (kassa:self_report); bekor qilingan hisobot (kassa:bad_status); avans hisoboti emas (kassa:not_found); bo''sh ro''yxat (kassa:file)',
+  zz.as('U_KAS', format($f$select public.kassa_doc_files_add(%L, '["adv/33333333-3333-4333-8333-333333333333.png"]')::text$f$, zz.id('Y4'))) || ' | '
+  || zz.as('U_KAS', format($f$select public.kassa_doc_files_add(%L, '["adv/33333333-3333-4333-8333-333333333333.png"]')::text$f$, zz.id('O1'))) || ' | '
+  || zz.as('U_FM2', format($f$select public.kassa_doc_files_add(%L, '["adv/33333333-3333-4333-8333-333333333333.png"]')::text$f$, zz.id('Y4'))) || ' | '
+  || zz.as('U_ACC', format($f$select public.kassa_doc_files_add(%L, '["adv/33333333-3333-4333-8333-333333333333.png"]')::text$f$, zz.id('O1'))) || ' | '
+  || zz.as('U_ACC', format($f$select public.kassa_doc_files_add(%L, '["adv/33333333-3333-4333-8333-333333333333.png"]')::text$f$, zz.id('C7'))) || ' | '
+  || zz.as('U_ACC', format($f$select public.kassa_doc_files_add(%L, '[]')::text$f$, zz.id('Y4'))),
+  '^ERR 42501 \[\].* \| ERR 42501 \[\].* \| ERR 42501 \[kassa:self_report\].* \| ERR P0001 \[kassa:bad_status\].* \| ERR 22023 \[kassa:not_found\].* \| ERR 22023 \[kassa:file\].*$');
+select zz.put('Y8', zz.appr('U_ACC', zz.id('Y4')));
+select zz.chk('Y8 tasdiqlandi (o''tkazildi) — fayllar o''z joyida; o''tkazilgan hisobotga ham qo''shiladi; boshqa hujjatdagi fayl — rad',
+  zz.f(zz.get('Y8'), 'status') || ':' || zz.f(zz.get('Y8'), 'filesN') || ' | '
+  || zz.f(zz.as('U_DIR', format($f$select public.kassa_doc_files_add(%L, '["adv/77777777-7777-4777-8777-777777777777.jpg"]')::text$f$, zz.id('Y4'))), 'added')
+  || ' | ' || zz.as('U_DIR', format($f$select public.kassa_doc_files_add(%L, '["adv/11111111-1111-4111-8111-111111111111.jpg"]')::text$f$, zz.id('T2'))),
+  '^posted:3 \| ERR 22023 \[kassa:file\].*yuklanmagan.* \| ERR 22023 \[kassa:file\].*boshqa hujjatga.*$');
+insert into storage.objects (bucket_id, name) select 'receipts', 'adv/' || gen_random_uuid() || '.jpg' from generate_series(1, 18);
+select zz.chk('Y9 hujjatda 20 tadan ortiq fayl — rad, hech biri qo''shilmaydi (3 + 18 = 21)',
+  zz.as('U_ACC', format('select public.kassa_doc_files_add(%L, %L::jsonb)::text', zz.id('Y4'),
+        (select jsonb_agg(o.name) from storage.objects o where o.bucket_id = 'receipts' and not exists (select 1 from public.cash_doc_files f where f.path = o.name))::text))
+  || ' | ' || zz.nfiles(zz.id('Y4')),
+  '^ERR 22023 \[kassa:file\].*20 tadan.* \| 3$');
+select zz.chk('Y10 jadvalni to''g''ridan-to''g''ri o''qish: buxgalter — 3; kassir — 0; yozish — hech kimga',
+  zz.as('U_ACC', $q$select count(*)::text from public.cash_doc_files$q$) || ':' || zz.as('U_KAS', $q$select count(*)::text from public.cash_doc_files$q$)
+  || ' | ' || zz.as('U_DIR', $q$insert into public.cash_doc_files (path, "docId") values ('adv/88888888-8888-4888-8888-888888888888.jpg', 'x') returning path$q$),
+  '^3:0 \| ERR 42501');
 
 -- ---------- Natija ----------
 select case when ok then 'PASS ' else 'FAIL ' end || name || case when ok then '' else '  (olindi: ' || coalesce(left(got, 500), '<null>') || ' ; kutilgan: ' || pat || ')' end

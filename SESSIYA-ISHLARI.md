@@ -3815,6 +3815,49 @@ kirim-chiqim hisoboti tayyorlay olsin.» **Holat:** jonli zanjir va `admin.html`
   farq 6970 da qarzimiz bo'lib turadi va kassadan «Ortiqcha sarfni qoplash» orderi bilan beriladi; RP-07 — har hisobdor bo'yicha qoldiq,
   qarz, muddati o'tgan avanslar. Modul bilan birga (`--dev`) — keyingi deploy bilan.
 
+## 101) F2.6 2-qism — avans hisoboti cheklari surati, hisobot muddati sozlamasi va yangi avansni bloklash (reliz 25) — 2026-11-27
+
+- **Egasi (2026-11-27):** «Qolgan bandlarni boshla» — F2.6 ning 2-qismi (reja: chek suratlari — yopiq saqlash joyi; hisobot muddati
+  sozlamasi va muddati o'tganda yangi avansni bloklash; FD-14: «muddati o'tsa ogohlantirish, bloklash — sozlama»).
+- **Cheklar surati (`kassa.sql`, `kassa-links.sql`):** yopiq «receipts» bucket (namuna — «medical»: JPEG / PNG / PDF, 5 MB gacha; yuklash va
+  o'qish — 2-ro'yxat va Direktor, faqat `adv/<uuid>.<kengaytma>`; ustiga yozish va o'chirish yo'q). Fayl yo'li hujjatga alohida jadvalda
+  yoziladi (`public.cash_doc_files` — hujjat o'zgarmas qoladi; bitta fayl — bitta hujjat; faqat qo'shiladi, hujjatda 20 tagacha):
+  avans hisoboti bilan birga (`kassa_adv_report.files` — yuklanmagan, yo'li noto'g'ri, takror — rad `kassa:file`; fayllar so'rov izida —
+  o'sha kalit bilan boshqa fayllar `kassa:ref_mismatch`) yoki keyin (`kassa_doc_files_add` — tasdiq kutayotgan yoki o'tkazilgan hisobotga;
+  hisobdorning o'zi, kassir, bekor qilingan / rad etilgan hisobot — rad). Ro'yxat — `kassa_doc_files` (asl nomi, kim va qachon qo'shgan);
+  hujjat ma'lumotida fayllar soni (`filesN`).
+- **Hisobot muddati va bloklash (`fin-core.sql`, `kassa-docs.sql`, `kassa-day.sql`):** Direktor sozlamasi — muddat 1–30 maktab ish kuni
+  (`fin_org.extra.advDays`, standart 3; `app.kassa_adv_days`) va bloklash (`extra.advBlock`; `app.kassa_adv_block`). Nazorat ro'yxatidagi
+  hisobdorlar, eslatmalar (F1.24), RP-07 ro'yxati va kartochkasi muddatni sozlamadan oladi (avval 3 qattiq edi). Bloklash yoqilsa — muddati
+  o'tgan yopilmagan avansi (FIFO bo'yicha eng eskisi, `app.kassa_acc_late`) bor xodimga yangi «Hisobdorga avans» so'rovi ham, allaqachon
+  tasdiqlangan so'rov bo'yicha pul berish ham rad (`kassa:adv_overdue`, sana va muddat bilan; pul berishda hisobdor qulfi ostida);
+  o'chiq bo'lsa — avvalgidek (ogohlantirish, yangi avans Direktor tasdig'i bilan).
+- **Sahifa (`fin-kassa.js`, `admin.html`):** avans hisoboti oynasida «Cheklar surati» (bir nechta fayl; tur va hajm sahifada ham tekshiriladi;
+  saqlashda yuklanadi — xato bo'lsa qayta yuborishda yuklangani qayta yuklanmaydi); so'rovlar jadvali va dalolatnomalar ro'yxatida «📎 N»
+  (2-ro'yxat va Direktor; «Tasdiqlash» bo'limida ham) — fayllar oynasi: ro'yxat, «Ochish» (imzolangan havola, 2 daqiqa), keyin qo'shish;
+  tasdiq oynasida fayllar soni;
+  «⚙ Sozlamalar»da muddat va bloklash; RP-07 da muddat sozlamadan. `finCtx` ga `receiptPut` / `receiptUrl` (yopiq bucket — `medical` kabi).
+- **Reliz 25:** `fin-version`, `SERVER_VER`, `kassa-checks` (moliya jadvallari 22, ochiq funksiyalar 62, ichki 138, RLS siyosatlari 21, barmoq
+  izlari 402), `test-kassa-checks` (A0), `test-fin-rights` (L2 — `cash_doc_files`, L4 / L4b — `kassa_doc_files`, `kassa_doc_files_add`).
+  Topilgan nozik holat: `kassa_doc_json` ichidagi izohda «kassa_doc_files (…» yozuvi huquqlar sinovining chaqiruvlar zanjiri evristikasida
+  chaqiruv deb sanalib, L4 ga ortiqcha RPC'lar tushdi — izoh qayta yozildi (kod emas). `app.fin_list2` endi RLS siyosatida (fayllar jadvali va
+  «receipts» bucket) — `rls-plpgsql.sql` ro'yxatiga qo'shildi (reja keshlanadi; `test-rls-timing` G01); `test-sales-role` urug'ida
+  `cash_doc_files` uchun yo'l qolipiga mos qiymat.
+- **Sinovlar:** `test-kassa-adv.sql` 72 (+17: (M) muddat sozlamasi — faqat Direktor, qiymatlar, aynan chegarada, kartochka / RP-07 / nazorat
+  ro'yxati; bloklash — so'rov va pul berishda, o'chiq holat; (Y) bucket siyosatlari — yuklash va o'qish rollar bo'yicha (yuklash siyosati
+  o'qish siyosatisiz alohida), hisobotga fayllar, iz, keyin qo'shish, 20 chegarasi, taqiqlar, jadvalni to'g'ridan-to'g'ri o'qish / yozish);
+  F2.6a dagi «hujjat yozilmaydi» sanoqlari bir ifodadagi oddiy so'rov bilan zaif edi (o'sha ifodada yozilgan hujjatni ko'rmaydi) —
+  plpgsql yordamchi bilan kuchaytirildi; mutatsiya 37/37 (birinchi o'tishda 2 tasi tirik — qo'shishdagi rol tekshiruvi ichki ro'yxat
+  funksiyasi bilan yashiringan, yuklash siyosati sinovdagi RETURNING tufayli o'qish siyosati bilan yashiringan: sinovlar aniqlashtirildi);
+  node `fin-kassa` (+1: tur / hajm, UUID va yo'l qolipi, qo'shish huquqi, tasdiq matni); brauzer — yangi `k27` (21).
+- **Natija:** to'liq regressiya (dev zanjir va qayta zanjir, poyga 78/78, jonli zanjir va qayta zanjir, tugun va server sinovlari) — hammasi
+  yashil (`test-kassa-adv` 72/72, `test-kassa-checks` 55/55, `test-fin-rights` 125/125, `test-sales-role` 121/121, `test-rls-timing` 27/27;
+  birinchi to'liq o'tishda ikkalasi dev zanjirda yiqildi — yuqoridagi `fin_list2` va urug' tuzatildi); brauzer to'plami — 34 o'tish, hammasi
+  o'tdi; keyin «Tasdiqlash» bo'limiga «📎» qo'shildi va `k26`, `k27` qayta o'tkazildi (21/21, 21/21) — jami 822 tekshiruv.
+- **Egasi va buxgalter uchun:** cheklarni telefonda suratga olib avans hisobotiga biriktirish mumkin — tasdiqlovchi ularni tizimda ko'radi
+  (qog'oz cheklar baribir topshiriladi). Avans hisoboti muddati va bloklash — Direktor «⚙ Sozlamalar»da; bloklashni yoqish buxgalter bilan
+  kelishiladi (Sh-8 B10, FD-14). Modul bilan birga (`--dev`) — keyingi deploy bilan.
+
 ## Tekshiruv usullari (shu sessiyada ishlatilgan)
 - **PG16** lokal: `migration/run-all.sql` to'liq build + funksional SQL testlar (pul RPC'lari service_role claim bilan).
 - **JS birlik testlari**: haqiqiy funksiyalar `admin.html`dan ajratib olinib (billingInterval/attMetrics/personRules/tzHMParts, Hik id, readBody, redactPII) — barchasi o'tdi.

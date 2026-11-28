@@ -1273,6 +1273,63 @@ end $$;
 revoke all on function public.kassa_offset_void(text, text) from public, anon;
 grant execute on function public.kassa_offset_void(text, text) to authenticated;
 
+-- ---------- Avans hisobotiga biriktirilgan fayllar — cheklar surati (F2.6b, reliz 25) ----------
+--   Fayl sahifadan yopiq «receipts» bucket'iga yuklanadi (kassa.sql: siyosatlar — 2-ro'yxat va Direktor), so'ng yo'li hujjatga yoziladi
+--   (public.cash_doc_files). Ro'yxat: ["adv/<uuid>.jpg", …] yoki [{"path": …, "name": asl nomi}, …] — 20 tagacha, takrorsiz; saqlash joyi bo'lsa
+--   (storage.objects) fayl yuklangan bo'lishi shart. Natija — [{path, name}] (berilgan tartibda).
+create or replace function app.kassa_files_norm(p_files jsonb) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+declare v jsonb := '[]'::jsonb; x jsonb; v_path text; v_name text; v_n int := 0;
+begin
+  if p_files is null or p_files = 'null'::jsonb then return v; end if;
+  if jsonb_typeof(p_files) <> 'array' then raise exception 'Fayllar ro''yxati noto''g''ri' using errcode = '22023', hint = 'kassa:file'; end if;
+  if jsonb_array_length(p_files) > 20 then
+    raise exception 'Bitta hujjatga 20 tadan ortiq fayl biriktirilmaydi' using errcode = '22023', hint = 'kassa:file';
+  end if;
+  for x in select e from jsonb_array_elements(p_files) e loop
+    v_n := v_n + 1;
+    v_path := btrim(coalesce(case jsonb_typeof(x) when 'string' then x #>> '{}' when 'object' then x ->> 'path' end, ''));
+    v_name := left(btrim(regexp_replace(coalesce(case when jsonb_typeof(x) = 'object' then x ->> 'name' end, ''), '[[:cntrl:]]+', ' ', 'g')), 120);
+    if v_path !~ '^adv/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|pdf)$' then
+      raise exception '%-fayl: yo''li noto''g''ri (chek surati — rasm yoki PDF)', v_n using errcode = '22023', hint = 'kassa:file';
+    end if;
+    if exists (select 1 from jsonb_array_elements(v) y where y ->> 'path' = v_path) then
+      raise exception '%-fayl ikki marta berilgan', v_n using errcode = '22023', hint = 'kassa:file';
+    end if;
+    if to_regclass('storage.objects') is not null
+       and not exists (select 1 from storage.objects o where o.bucket_id = 'receipts' and o.name = v_path) then
+      raise exception '%-fayl yuklanmagan (saqlash joyida yo''q) — faylni qayta tanlab yuboring', v_n using errcode = '22023', hint = 'kassa:file';
+    end if;
+    v := v || jsonb_build_array(jsonb_build_object('path', v_path, 'name', v_name));
+  end loop;
+  return v;
+end $$;
+revoke all on function app.kassa_files_norm(jsonb) from public, anon, authenticated;
+
+-- Fayllarni hujjatga yozish: bitta fayl — bitta hujjat (boshqa hujjatniki — rad; o'sha hujjatniki — o'tkazib yuboriladi); hujjatda jami 20 tagacha.
+--   Natija — yangi qo'shilganlar soni.
+create or replace function app.kassa_files_add(p_doc text, p_files jsonb, p_uid text) returns int
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare x jsonb; v_other text; v_n int := 0;
+begin
+  for x in select e from jsonb_array_elements(app.kassa_files_norm(p_files)) e loop
+    select f."docId" into v_other from public.cash_doc_files f where f.path = x ->> 'path';
+    if found then
+      if v_other is distinct from p_doc then
+        raise exception 'Fayl boshqa hujjatga biriktirilgan' using errcode = '22023', hint = 'kassa:file';
+      end if;
+      continue;
+    end if;
+    insert into public.cash_doc_files (path, "docId", name, "addedBy") values (x ->> 'path', p_doc, x ->> 'name', p_uid);
+    v_n := v_n + 1;
+  end loop;
+  if (select count(*) from public.cash_doc_files f where f."docId" = p_doc) > 20 then
+    raise exception 'Bitta hujjatga 20 tadan ortiq fayl biriktirilmaydi' using errcode = '22023', hint = 'kassa:file';
+  end if;
+  return v_n;
+end $$;
+revoke all on function app.kassa_files_add(text, jsonb, text) from public, anon, authenticated;
+
 -- ---------- Avans hisoboti (АО-1): hisobdor shaxs sarflagan pul — NAQDSIZ dalolatnoma, ikki bosqichda (F2.6) ----------
 --   Qog'ozdagi avans hisoboti (cheklar bilan; shakllar.md, Sh-1) bo'yicha buxgalter, Moliya menejeri yoki Direktor KIRITADI — dalolatnoma
 --   (ACT; kassa kitobiga kirmaydi) tasdiq kutadi (draft, «needsList2»); BOSHQA 2-ro'yxat xodimi yoki Direktor TASDIQLAYDI (kassa_doc_approve
@@ -1296,7 +1353,7 @@ declare
   v_uid text := app.uid(); v_ref text; v_pid text; v_pname text; v_rep text; v_basis text; v_today date := app.fin_today();
   v_lines jsonb := '[]'::jsonb; v_line jsonb; v_i int := 0; v_amt numeric; v_total numeric := 0; v_art public.fin_articles%rowtype;
   v_note text; v_open numeric; v_doc_id text; v_dup boolean; v_ex public.cash_docs%rowtype;
-  v_hash text; v_over numeric; v_left numeric; v_split jsonb := '[]'::jsonb;
+  v_hash text; v_over numeric; v_left numeric; v_split jsonb := '[]'::jsonb; v_files jsonb;
 begin
   if not (app.fin_list2() or app.is_admin()) then
     raise exception 'Ruxsat yo''q: avans hisobotini buxgalter, Moliya menejeri yoki Direktor kiritadi' using errcode = '42501';
@@ -1340,11 +1397,17 @@ begin
                                              'note', v_note, 'analytics', jsonb_build_object('partyId', v_pid));
   end loop;
 
-  -- state-9: hisobot mazmunining kanonik izi (hisobdor, sana, izoh, qatorlar — statiya, summa, chek) — qayta yuborishda solishtiriladi
-  v_hash := md5(jsonb_build_object('partyId', v_pid, 'reportDate', v_rep, 'basis', v_basis,
-                                   'lines', (select jsonb_agg(jsonb_build_object('articleId', x ->> 'articleId', 'amount', trim_scale((x ->> 'amount')::numeric),
-                                                                                  'note', x ->> 'note') order by o)
-                                               from jsonb_array_elements(v_lines) with ordinality t(x, o)))::text);
+  -- F2.6b: cheklar surati (ixtiyoriy) — yuklangan fayllar yo'llari (app.kassa_files_norm)
+  v_files := app.kassa_files_norm(p -> 'files');
+  -- state-9: hisobot mazmunining kanonik izi (hisobdor, sana, izoh, qatorlar — statiya, summa, chek; fayllar — berilgan bo'lsa) — qayta
+  --   yuborishda solishtiriladi
+  v_hash := md5((jsonb_build_object('partyId', v_pid, 'reportDate', v_rep, 'basis', v_basis,
+                                    'lines', (select jsonb_agg(jsonb_build_object('articleId', x ->> 'articleId', 'amount', trim_scale((x ->> 'amount')::numeric),
+                                                                                   'note', x ->> 'note') order by o)
+                                                from jsonb_array_elements(v_lines) with ordinality t(x, o)))
+                 || case when jsonb_array_length(v_files) > 0
+                         then jsonb_build_object('files', (select jsonb_agg(x ->> 'path' order by x ->> 'path') from jsonb_array_elements(v_files) x))
+                         else '{}'::jsonb end)::text);
   perform pg_advisory_xact_lock(hashtext('iqror_doc:' || v_ref));   -- L0: qayta yuborish navbatga turadi
   select * into v_ex from public.cash_docs c where c."clientRef" = v_ref;
   if found then
@@ -1391,6 +1454,7 @@ begin
                                            'overspend', v_over, 'dueBefore', app.kassa_acc_due(v_pid)),
       'lines', v_split), 'ACT', v_uid, true) b;
   perform app.kassa_flag(false);
+  if not coalesce(v_dup, false) and jsonb_array_length(v_files) > 0 then perform app.kassa_files_add(v_doc_id, v_files, v_uid); end if;
   return app.kassa_doc_json(v_doc_id) || jsonb_build_object('ok', true, 'dup', false, 'openBefore', v_open, 'openAfter', v_open - (v_total - v_over),
                                                             'overspend', v_over);
 end $$;
@@ -1486,6 +1550,54 @@ begin
 end $$;
 revoke all on function public.kassa_adv_report_void(text, text) from public, anon;
 grant execute on function public.kassa_adv_report_void(text, text) to authenticated;
+
+-- Hujjat fayllari (F2.6b): avans hisoboti cheklari surati — asl nomi, kim va qachon qo'shgan. Ko'radi — 2-ro'yxat va Direktor («receipts»
+--   bucket'ini o'qish siyosati bilan bir doira: sahifa faylni shu yo'l bilan imzolangan havola orqali ochadi).
+create or replace function public.kassa_doc_files(p_id text) returns jsonb
+language plpgsql stable security definer set search_path = public, app, pg_temp as $$
+begin
+  if not (app.fin_list2() or app.is_admin()) then raise exception 'Ruxsat yo''q' using errcode = '42501'; end if;
+  if not exists (select 1 from public.cash_docs c where c.id = p_id) then
+    raise exception 'Hujjat topilmadi' using errcode = '22023', hint = 'kassa:not_found';
+  end if;
+  return jsonb_build_object('ok', true, 'files', coalesce((
+    select jsonb_agg(jsonb_build_object('path', f.path, 'name', f.name, 'addedBy', f."addedBy",
+                                        'addedByName', app.kassa_names(array[f."addedBy"]) ->> f."addedBy", 'addedAt', f."addedAt")
+                     order by f."addedAt", f.path)
+      from public.cash_doc_files f where f."docId" = p_id), '[]'::jsonb));
+end $$;
+revoke all on function public.kassa_doc_files(text) from public, anon;
+grant execute on function public.kassa_doc_files(text) to authenticated;
+
+-- Avans hisobotiga keyin fayl qo'shish (tasdiq kutayotgan yoki o'tkazilgan hisobotga; masalan, chek keyin topildi): 2-ro'yxat yoki Direktor,
+--   hisobdorning o'zi emas (sec-1); bekor qilingan / rad etilgan hisobotga — yo'q. Fayllar faqat qo'shiladi (o'chirilmaydi); jami 20 tagacha.
+create or replace function public.kassa_doc_files_add(p_id text, p_files jsonb) returns jsonb
+language plpgsql security definer set search_path = public, app, pg_temp as $$
+declare v_uid text := app.uid(); v_doc public.cash_docs%rowtype; v_n int;
+begin
+  if not (app.fin_list2() or app.is_admin()) then
+    raise exception 'Ruxsat yo''q: avans hisobotiga cheklar suratini buxgalter, Moliya menejeri yoki Direktor qo''shadi' using errcode = '42501';
+  end if;
+  select * into v_doc from public.cash_docs c where c.id = p_id;
+  if not found or v_doc.op is distinct from 'nc_adv_report' then
+    raise exception 'Avans hisoboti topilmadi' using errcode = '22023', hint = 'kassa:not_found';
+  end if;
+  if v_doc."partyId" = any(app.kassa_user_cards(v_uid)) then   -- sec-1
+    raise exception 'O''zingiz hisobdor bo''lgan avans hisobotiga fayl qo''shmaysiz — uni boshqa 2-ro''yxat xodimi yoki Direktor qo''shadi'
+      using errcode = '42501', hint = 'kassa:self_report';
+  end if;
+  if v_doc.status not in ('draft', 'posted') then
+    raise exception 'Bekor qilingan yoki rad etilgan avans hisobotiga fayl qo''shilmaydi (holati: %)', v_doc.status using errcode = 'P0001', hint = 'kassa:bad_status';
+  end if;
+  if p_files is null or jsonb_typeof(p_files) <> 'array' or jsonb_array_length(p_files) = 0 then
+    raise exception 'Fayl tanlanmagan' using errcode = '22023', hint = 'kassa:file';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('iqror_files:' || p_id));   -- bir vaqtda qo'shilsa ham hujjatda 20 tadan oshmaydi
+  v_n := app.kassa_files_add(p_id, p_files, v_uid);
+  return public.kassa_doc_files(p_id) || jsonb_build_object('added', v_n);
+end $$;
+revoke all on function public.kassa_doc_files_add(text, jsonb) from public, anon;
+grant execute on function public.kassa_doc_files_add(text, jsonb) to authenticated;
 
 -- ---------- Moslik (§8.1: P1, P4, P5, P8) — kassa hujjatlari ↔ pul yozuvlari, kassa ishlagan kunlarda (g4v-4) ----------
 --   P1  naqd o'quv to'lovi = KO-1:   pay  — kirim orderisiz (yoki summasi / kuni boshqa) naqd to'lov;

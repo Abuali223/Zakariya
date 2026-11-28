@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { controlRows, zText, kpiRows, advArticles, goLiveConfirm, restartStaleTxt, cpIsOrg, cpLabel, cpUnconfirmed, canApproveList2, canPayDoc,
   deskHolder, needCommission, handoverRole, diffText, countedAtHandover, canVoidDoc, shortageWhy, outboxRefs, paperRead, countResultText,
   pendingText, handoverRefs, fiscalReq, orgCashParty, amtRead, amtShow, AMT_ERR, AMT_TIYIN, outboxDeclare, deskOutbox, bookCoverWhy, verifyLink,
-  canApproveAdv, canApproveDoc, advSplit, advSuggest, advOver, advApproveText, accCardRows } from './fin-kassa.js';
+  canApproveAdv, canApproveDoc, advSplit, advSuggest, advOver, advApproveText, accCardRows,
+  RECEIPT_MAX, receiptCheck, uuid4, receiptPath, canAddAdvFiles } from './fin-kassa.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -826,4 +827,33 @@ test('F2.6 nazorat ro‘yxati: «hisobdorlarga qarzimiz (ortiqcha sarf)» — qa
   assert.equal(r.level, 'warn'); assert.equal(r.value, 'Sinov Zavxoz: 40 000 so‘m');
   r = by(controlRows(Object.assign(clean(), { accDue: [{ partyId: 'staff:st1', name: 'Sinov Zavxoz', due: -1000 }] }))).accDue;
   assert.equal(r.level, 'bad'); assert.ok(r.value.includes('tekshiring'), r.value);
+});
+
+test('F2.6b cheklar surati: tur va hajm tekshiruvi, UUID va saqlash yo‘li (server qolipi), qo‘shish huquqi, tasdiq oynasida fayllar soni', () => {
+  assert.equal(receiptCheck({ name: 'chek.jpg', type: 'image/jpeg', size: 1000 }), null);
+  assert.equal(receiptCheck({ name: 'chek.png', type: 'image/png', size: RECEIPT_MAX }), null);
+  assert.equal(receiptCheck({ name: 'hisob.pdf', type: 'application/pdf', size: 20 }), null);
+  assert.match(receiptCheck({ name: 'a.heic', type: 'image/heic', size: 10 }), /faqat rasm \(JPEG, PNG\) yoki PDF/);
+  assert.match(receiptCheck({ name: 'a.exe', type: '', size: 10 }), /«a\.exe»/);
+  assert.match(receiptCheck({ name: 'b.jpg', type: 'image/jpeg', size: 0 }), /bo‘sh/);
+  assert.match(receiptCheck({ name: 'c.jpg', type: 'image/jpeg', size: RECEIPT_MAX + 1 }), /5 MB dan katta/);
+  assert.match(receiptCheck(null), /tanlanmagan/);
+  const u = uuid4(new Uint8Array(16).fill(255));
+  assert.equal(u, 'ffffffff-ffff-4fff-bfff-ffffffffffff');
+  assert.equal(uuid4(new Uint8Array(16)), '00000000-0000-4000-8000-000000000000');
+  const re = /^adv\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|pdf)$/;   // kassa.sql: cash_doc_files.path / bucket siyosati
+  for (const t of ['image/jpeg', 'image/png', 'application/pdf']) assert.match(receiptPath(t, uuid4()), re);
+  assert.equal(receiptPath('image/png', u), 'adv/ffffffff-ffff-4fff-bfff-ffffffffffff.png');
+  assert.notEqual(uuid4(), uuid4());
+  const d = { op: 'nc_adv_report', status: 'draft', partyId: 'staff:st2' };
+  assert.equal(canAddAdvFiles(d, { list2: true, cards: [] }), true);
+  assert.equal(canAddAdvFiles({ ...d, status: 'posted' }, { director: true }), true);
+  assert.equal(canAddAdvFiles(d, { list2: true, cards: ['staff:st2'] }), false);   // hisobdorning o'zi
+  assert.equal(canAddAdvFiles({ ...d, status: 'void' }, { list2: true }), false);
+  assert.equal(canAddAdvFiles({ ...d, status: 'rejected' }, { director: true }), false);
+  assert.equal(canAddAdvFiles(d, { operator: true }), false);   // kassir
+  assert.equal(canAddAdvFiles({ ...d, op: 'out_accountable' }, { list2: true }), false);
+  assert.match(advApproveText({ partyName: 'X', amount: 1000, filesN: 2 }), /Cheklar surati: 2 ta/);
+  assert.match(advApproveText({ partyName: 'X', amount: 1000, filesN: 0 }), /Cheklar surati: biriktirilmagan/);
+  assert.ok(!advApproveText({ partyName: 'X', amount: 1000 }).includes('Cheklar surati'));   // eski server (filesN yo'q)
 });

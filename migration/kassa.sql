@@ -418,6 +418,56 @@ create table if not exists public.cash_doc_verify (
   "createdAt" timestamptz not null default now()
 );
 
+-- ---------- Hujjatga biriktirilgan fayllar — avans hisoboti cheklari surati (F2.6b, reliz 25) ----------
+--   Fayl yopiq «receipts» bucket'ida (pastda), yo'li — adv/<uuid>.<jpg|jpeg|png|pdf>; bitta fayl — bitta hujjatga. Faqat qo'shiladi
+--   (o'chirilmaydi, almashtirilmaydi — hujjat izi); hujjat o'zgarmas (kassa_doc_guard) — fayllar alohida jadvalda, hujjat o'tkazilgandan
+--   keyin ham qo'shiladi (kassa-links.sql: kassa_adv_report, kassa_doc_files_add). O'qish — avans hisobotini kirituvchi / tasdiqlovchilar
+--   (2-ro'yxat, Direktor): RLS va kassa_doc_files; ko'rish — imzolangan havola (bucket o'qish siyosati shu doira bilan).
+create table if not exists public.cash_doc_files (
+  path        text primary key check (path ~ '^adv/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|pdf)$'),
+  "docId"     text not null references public.cash_docs(id),
+  name        text not null default '' check (length(name) <= 120),
+  "addedBy"   text,
+  "addedAt"   timestamptz not null default now()
+);
+create index if not exists cash_doc_files_doc_idx on public.cash_doc_files ("docId", "addedAt");
+alter table public.cash_doc_files enable row level security;
+revoke all on table public.cash_doc_files from public, anon, authenticated;
+grant select on table public.cash_doc_files to authenticated;
+drop policy if exists cash_doc_files_sel on public.cash_doc_files;
+create policy cash_doc_files_sel on public.cash_doc_files for select using (app.fin_list2() or app.is_admin());
+grant all on table public.cash_doc_files to service_role;
+-- Yopiq «receipts» bucket: o'qish (imzolangan havola) va yuklash — 2-ro'yxat (Moliya menejeri, buxgalter) va Direktor; faqat
+--   adv/<uuid>.<jpg|jpeg|png|pdf>; ustiga yozish (upsert) va o'chirish yo'q. Hajm ≤ 5 MB, tur — haqiqiy Supabase'da bucket sozlamasi
+--   (sinov o'rinbosarida bu ustunlar yo'q). Namuna — nurse-sick.sql «medical».
+do $$
+begin
+  if to_regclass('storage.buckets') is null then return; end if;
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'storage' and table_name = 'buckets' and column_name = 'file_size_limit')
+     and exists (select 1 from information_schema.columns
+              where table_schema = 'storage' and table_name = 'buckets' and column_name = 'allowed_mime_types') then
+    execute $q$insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+               values ('receipts', 'receipts', false, 5242880, array['image/jpeg', 'image/png', 'application/pdf'])
+               on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit,
+                                              allowed_mime_types = excluded.allowed_mime_types$q$;
+  else
+    execute $q$insert into storage.buckets (id, name, public) values ('receipts', 'receipts', false)
+               on conflict (id) do update set public = false$q$;
+  end if;
+end $$;
+do $$
+begin
+  if to_regclass('storage.objects') is null then return; end if;
+  execute 'drop policy if exists iqror_receipts_read on storage.objects';
+  execute $q$create policy iqror_receipts_read on storage.objects for select
+             using ( bucket_id = 'receipts' and ((select app.fin_list2()) or (select app.is_admin())) )$q$;
+  execute 'drop policy if exists iqror_receipts_insert on storage.objects';
+  execute $q$create policy iqror_receipts_insert on storage.objects for insert
+             with check ( bucket_id = 'receipts' and ((select app.fin_list2()) or (select app.is_admin()))
+                          and name ~ '^adv/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|pdf)$' )$q$;
+end $$;
+
 -- ---------- RLS: faqat o'qish; yozish — kassa funksiyalari ----------
 do $$ declare t text; begin
   foreach t in array array['cash_days', 'cash_docs', 'cash_doc_lines', 'payment_allocations', 'cash_day_events', 'cash_counts', 'fin_snapshots', 'cash_prints',

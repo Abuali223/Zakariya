@@ -1631,6 +1631,9 @@ function navRebuild(){
 // Modullarga beriladigan yordamchilar (modul admin.html ichki funksiyalarini shu orqali ishlatadi).
 function finCtx(){ return { $, esc, toast, rpc, fmtSom, openModal, closeModal, printHTML, SESSION, finMod, qrDataUrl,   // qrDataUrl — F2.12: patta QR
   cpList:()=>loadCol('fin_counterparties'),   // F2.2: kontragentlar ro'yxati (o'qish — kassa rollari, RLS)
+  // F2.6b: avans hisoboti cheklari surati — yopiq «receipts» bucket (yuklash — ustiga yozmasdan; ko'rish — imzolangan havola, 2 daqiqa)
+  receiptPut:async(path, blob, type)=>{ const m=await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js?v=2"); await m.uploadBytesNoOverwrite(m.ref(m.getStorage(app,'receipts'), path), blob, { contentType:type }); },
+  receiptUrl:async(path)=>{ const m=await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js?v=2"); return m.getSignedURL(m.ref(m.getStorage(app,'receipts'), path), 120); },
   students:async()=>{ const a=(cache.students&&cache.students.length)?cache.students:await loadCol('students','order'); cache.students=a; return a; },
   // Kunni yopish / smena topshirish (state-2): qurilma navbatidagi hali yuborilmagan naqd to'lovlar — har biri kaliti (payId) va summasi
   //   bilan (server o'tib ketganlarini hisobga olmaydi, qolganini saqlab, keyin kelgan kech kirim orderiga bog'laydi); oynadan oldin navbat yuboriladi.

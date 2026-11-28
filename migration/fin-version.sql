@@ -95,8 +95,13 @@ do $iqror_guard$ begin raise exception 'iqror: fin-version.sql ALOHIDA ishga tus
 --          app.kassa_acc_due — hisobdorga qarzimiz); «Ortiqcha sarfni qoplash» KO-2 (out_overspend, Dt 6970 Kt 5010, qarzdan oshmaydi);
 --          hisobdorga avans maqsadi (purposeArticle — sourceSnapshot); RP-07 public.kassa_acc_card (app.kassa_acc_fifo); kassa_checks.accDue;
 --          kassa_staff_open.due.
+--     25 — 2-bosqich F2.6 (2-qism): avans hisoboti cheklari surati — yopiq «receipts» bucket (2-ro'yxat va Direktor), public.cash_doc_files
+--          (faqat qo'shiladi), kassa_adv_report.files, public.kassa_doc_files / kassa_doc_files_add (app.kassa_files_norm, kassa_files_add),
+--          kassa_doc_json.filesN; avans hisoboti muddati sozlamasi (fin_org.extra.advDays, standart 3 ish kuni — app.kassa_adv_days) va
+--          muddati o'tgan avansi bor xodimga yangi avansni bloklash (extra.advBlock — app.kassa_adv_block, app.kassa_acc_late: so'rov va pul
+--          berishda kassa:adv_overdue); kassa_acc_card.advDays.
 --   HOLAT: run-all.sql'da «--dev \ir» — prod'ga hali chiqmaydi.
 -- =====================================================================
 create or replace function app.kassa_version() returns int
-language sql immutable set search_path = public, app, pg_temp as $$ select 24 $$;
+language sql immutable set search_path = public, app, pg_temp as $$ select 25 $$;
 revoke all on function app.kassa_version() from public, anon, authenticated;
